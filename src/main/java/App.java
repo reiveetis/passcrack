@@ -6,7 +6,8 @@ public class App {
     static void main(String[] args){
         long start = System.currentTimeMillis();
         Scanner sc = new Scanner(System.in);
-        StringProducer strProd = new StringProducer(4);
+        StringProducer strProd = new StringProducer(6);
+//        strProd.produceAll();
         String str = strProd.produceNext();
         while (str != null) {
 //            System.out.println(str);
