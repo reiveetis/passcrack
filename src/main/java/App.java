@@ -1,10 +1,32 @@
-import java.util.ArrayList;
-
 public class App {
-    static void main(String[] args) {
+    private static final String charset = "abcdefghijklmnopqrstuvwxyz";
+    static void main(String[] args) throws Exception {
+
+
         long start = System.currentTimeMillis();
-        StringProducer strProd = new StringProducer(5);
+        int length = 7;
+        int[] chars = new int[length];
+        int max = charset.length() - 1;
+
+        while (chars[0] != max + 1) {
+//            String str = "";
+//            for (int i = 0; i < length; i++) {
+//                str += charset.charAt(chars[i]);
+//            }
+//            System.out.println(str);
+
+            chars[length - 1]++;
+            int carryOffset = 1;
+            while (chars[length - carryOffset] == max + 1) {
+                if (carryOffset == length) break;
+                // set current to 0
+                chars[length - carryOffset] = 0;
+                // increment prev
+                carryOffset++;
+                chars[length - carryOffset]++;
+            }
+        }
         long end = System.currentTimeMillis();
-        System.out.println("Generated strings in: " + (end - start) + " ms.");
+        System.out.println("Computing took: " + (end - start) + "ms");
     }
 }
