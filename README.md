@@ -1,2 +1,2 @@
 # Brute Force Password Cracker
-Concurrent password cracker for Programming III - Concurrent Programming
+Password cracker for Programming III - Concurrent Programming
