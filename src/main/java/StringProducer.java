@@ -1,67 +1,51 @@
 public class StringProducer {
-    private static final String charset = "abcdefghijklmnopqrstuvwxyz";
-
     private int currentLength;
     private final int length;
     private final int maxChar;
-    private StringBuilder strBuilder = new StringBuilder();
+    private final StringBuilder strBuilder;
+    private final int[] buffer;
+    private final String charset;
 
-    // produceNext impl
-    private static int[] buffer;
-
-
-    StringProducer(int length) {
+    StringProducer(String charset, int length) {
+        this.currentLength = 1;
         this.length = length;
+        this.strBuilder = new StringBuilder();
+        this.charset = charset;
         this.maxChar = charset.length();
-        buffer = new int[length];
+        this.buffer = new int[length];
     }
 
+    /// This function returns a String of the next permutation of set 'charset' and 'length' constraints.
+    /// If the next permutation is impossible due to the given constraints, returns null
     public String produceNext() {
         if (buffer[0] == maxChar) {
-            return null;
+            // if current string is last permutation, return null
+            if (currentLength == length) {
+                return null;
+            }
+            // else, reset all elements < currentLength, increase currentLength
+            for (int i = 0; i < currentLength; i++) {
+               buffer[i] = 0;
+            }
+            currentLength++;
         }
-
         strBuilder.setLength(0);
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < currentLength; i++) {
             strBuilder.append(charset.charAt(buffer[i]));
         }
-
-        buffer[length - 1]++;
+        // increment last element
+        buffer[currentLength - 1]++;
+        // check for carry over
         short carryOffset = 1;
-        while (buffer[length - carryOffset] == maxChar) {
-            if (carryOffset == length) break;
+        while (buffer[currentLength - carryOffset] == maxChar) {
+            // if carry over index out of bounds, leave
+            if (carryOffset == currentLength) break;
             // set current to 0
-            buffer[length - carryOffset] = 0;
+            buffer[currentLength - carryOffset] = 0;
             // increment prev
             carryOffset++;
-            buffer[length - carryOffset]++;
+            buffer[currentLength - carryOffset]++;
         }
         return strBuilder.toString();
     }
-
-    public void produceAll() {
-        int[] chars = new int[length];
-
-        while (chars[0] != maxChar) {
-//            do stuff
-
-//            String str = "";
-//            for (int i = 0; i < length; i++) {
-//                str += charset.charAt(chars[i]);
-//            }
-//            System.out.println(str);
-
-            chars[length - 1]++;
-            short carryOffset = 1;
-            while (chars[length - carryOffset] == maxChar) {
-                if (carryOffset == length) break;
-                // set current to 0
-                chars[length - carryOffset] = 0;
-                // increment prev
-                carryOffset++;
-                chars[length - carryOffset]++;
-            }
-        }
-    }
-
 }

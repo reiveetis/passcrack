@@ -3,8 +3,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class Hasher {
-    private static MessageDigest sha256;
-    private static MessageDigest md5;
+    private final static MessageDigest sha256;
+    private final static MessageDigest md5;
 
     static {
         try {
@@ -15,23 +15,13 @@ public class Hasher {
         }
     }
 
+    /// This function returns a SHA-256 hashed byte[] of given String.
     public static byte[] hashSHA256(String str) {
         return sha256.digest(str.getBytes(StandardCharsets.UTF_8));
     }
 
+    /// This function returns a MD5 hashed byte[] of given String.
     public static byte[] hashMD5(String str) {
         return md5.digest(str.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            String hex = Integer.toHexString(b & 0xff);
-            if (hex.length() == 1) {
-                sb.append('0');
-            }
-            sb.append(hex);
-        }
-        return sb.toString();
     }
 }
