@@ -15,12 +15,25 @@ public class Hasher {
         }
     }
 
+    public enum Algorithm {
+        SHA256,
+        MD5
+    }
+
+    /// This function returns a hashed byte[] of given String and Algorithm.
+    public static byte[] hash(String str, Algorithm algorithm) {
+        return switch (algorithm) {
+            case SHA256 -> hashSHA256(str);
+            case MD5 -> hashMD5(str);
+        };
+    }
+
     /// This function returns a SHA-256 hashed byte[] of given String.
     public static byte[] hashSHA256(String str) {
         return sha256.digest(str.getBytes(StandardCharsets.UTF_8));
     }
 
-    /// This function returns a MD5 hashed byte[] of given String.
+    /// This function returns an MD5 hashed byte[] of given String.
     public static byte[] hashMD5(String str) {
         return md5.digest(str.getBytes(StandardCharsets.UTF_8));
     }
