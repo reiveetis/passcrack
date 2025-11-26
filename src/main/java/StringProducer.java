@@ -1,6 +1,7 @@
 public class StringProducer {
     private static final String charset = "abcdefghijklmnopqrstuvwxyz";
 
+    private int currentLength;
     private final int length;
     private final int maxChar;
     private StringBuilder strBuilder = new StringBuilder();
