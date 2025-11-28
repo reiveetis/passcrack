@@ -1,3 +1,5 @@
+import java.util.Arrays;
+
 public class StringProducer {
     private int currentLength;
     private final int maxLength;
@@ -5,10 +7,40 @@ public class StringProducer {
     private final StringBuilder strBuilder;
     private final int[] buffer;
     private final String charset;
+    private char[] mask = null;
 
-    StringProducer(String charset, int maxLength) {
-        this.currentLength = 1;
+    // TODO: Mask
+    // 1. count known characters in mask
+    // 2. maxLength -= knownCount
+    // 3. combine permutation with knownChars
+
+
+    StringProducer(String charset, int minLength, int maxLength) {
+        if (maxLength < minLength) {
+            throw new IllegalArgumentException("maxLength must be greater than minLength");
+        }
+        if (minLength <= 0) {
+            throw new IllegalArgumentException("minLength must be greater than zero");
+        }
+        this.currentLength = minLength;
         this.maxLength = maxLength;
+        this.strBuilder = new StringBuilder();
+        this.charset = charset;
+        this.maxChar = charset.length();
+        this.buffer = new int[maxLength];
+    }
+
+    StringProducer(String charset, String mask, char maskCh) {
+        this.mask = mask.toCharArray();
+        int unknownCount = 0;
+        for (int i = 0; i < this.mask.length; i++) {
+            if (this.mask[i] == maskCh) {
+                this.mask[i] = 0;
+                unknownCount++;
+            }
+        }
+        this.maxLength = unknownCount;
+        this.currentLength = maxLength;
         this.strBuilder = new StringBuilder();
         this.charset = charset;
         this.maxChar = charset.length();
@@ -19,6 +51,9 @@ public class StringProducer {
     /// If the next permutation is impossible due to the given constraints, returns null.
     public String produceNext() {
         // this is basically just a base N counter
+        if (mask != null && currentLength == 0) {
+            return null;
+        }
         if (buffer[0] == maxChar) {
             // if current string is last possible permutation, return null
             if (currentLength == maxLength) {
@@ -32,8 +67,22 @@ public class StringProducer {
         }
         // reset strBuilder and build new string
         strBuilder.setLength(0);
-        for (int i = 0; i < currentLength; i++) {
-            strBuilder.append(charset.charAt(buffer[i]));
+        if (mask == null) {
+            // maskless branch
+            for (int i = 0; i < currentLength; i++) {
+                strBuilder.append(charset.charAt(buffer[i]));
+            }
+        } else {
+            // mask branch
+            int curr = 0;
+            for (char c : mask) {
+                if (c == 0) {
+                    strBuilder.append(charset.charAt(buffer[curr]));
+                    curr++;
+                    continue;
+                }
+                strBuilder.append(c);
+            }
         }
         // increment last element
         buffer[currentLength - 1]++;
