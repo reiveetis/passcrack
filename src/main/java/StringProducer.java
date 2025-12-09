@@ -1,6 +1,14 @@
-import java.util.Arrays;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 
 public class StringProducer {
+    private static final int PERCENT = 100;
+    private static final int DECIMAL_POINTS = 1;
+    private static final int PREFERRED_PRECISION = 2;
+    // we're going to lose precision while trying to convert fraction to percentage
+    private static final int ACTUAL_PRECISION = PREFERRED_PRECISION + (int)Math.log10(PERCENT);
+
     private int currentLength;
     private final int maxLength;
     private final int maxChar;
@@ -9,11 +17,10 @@ public class StringProducer {
     private final String charset;
     private char[] mask = null;
 
-    // TODO: Mask
-    // 1. count known characters in mask
-    // 2. maxLength -= knownCount
-    // 3. combine permutation with knownChars
-
+    private BigDecimal allPerms = BigDecimal.ZERO;
+    private BigDecimal currPerm = BigDecimal.ZERO;
+    private BigDecimal chunkSize = BigDecimal.ZERO;
+    private BigDecimal chunkCounter = BigDecimal.ZERO;
 
     StringProducer(String charset, int minLength, int maxLength) {
         if (maxLength < minLength) {
@@ -28,6 +35,8 @@ public class StringProducer {
         this.charset = charset;
         this.maxChar = charset.length();
         this.buffer = new int[maxLength];
+        calculateAllPerms();
+        chunkSize = allPerms.divideToIntegralValue(BigDecimal.valueOf(Math.pow(10, Math.log10(PERCENT) + DECIMAL_POINTS)));
     }
 
     StringProducer(String charset, String mask, char maskCh) {
@@ -45,6 +54,30 @@ public class StringProducer {
         this.charset = charset;
         this.maxChar = charset.length();
         this.buffer = new int[maxLength];
+        calculateAllPerms();
+        chunkSize = allPerms.divideToIntegralValue(BigDecimal.valueOf(Math.pow(10, Math.log10(PERCENT) + DECIMAL_POINTS)));
+    }
+
+    private void calculateAllPerms() {
+        for (int i = currentLength; i <= maxLength; i++) {
+            allPerms = allPerms.add(BigDecimal.valueOf(maxChar).pow(i));
+        }
+    }
+
+    public boolean shouldShowProgress() {
+        if (chunkCounter.compareTo(chunkSize) > 0) {
+            chunkCounter = BigDecimal.ZERO;
+            return true;
+        }
+        return false;
+    }
+
+    public void getProgress() {
+        System.out.println(currPerm + "/" + allPerms);
+        System.out.println(currPerm
+                .divide(allPerms, ACTUAL_PRECISION, RoundingMode.DOWN)
+                .multiply(BigDecimal.valueOf(PERCENT))
+                .setScale(DECIMAL_POINTS, RoundingMode.DOWN) + "%");
     }
 
     /// This function returns a String of the next permutation of set 'charset' and 'maxLength' constraints.
@@ -97,6 +130,8 @@ public class StringProducer {
             carryOffset++;
             buffer[currentLength - carryOffset]++;
         }
+        chunkCounter = chunkCounter.add(BigDecimal.ONE);
+        currPerm = currPerm.add(BigDecimal.ONE);
         return strBuilder.toString();
     }
 }
