@@ -1,9 +1,6 @@
-import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.Scanner;
 
-public class App {
+public class AppSequential {
     // "hello", length = 5, SHA-256
 //    private static final String TARGET = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
@@ -43,7 +40,7 @@ public class App {
         String str = strProd.produceNext();
         while (str != null) {
             if (strProd.shouldShowProgress()) {
-                strProd.getProgress();
+                System.out.println(strProd.getProgress() + "%");
             }
             if (VERBOSE) {
                 System.out.println("Trying: " + str);

@@ -1,5 +1,4 @@
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 
 public class StringProducer {
@@ -22,7 +21,7 @@ public class StringProducer {
     private BigDecimal chunkSize = BigDecimal.ZERO;
     private BigDecimal chunkCounter = BigDecimal.ZERO;
 
-    StringProducer(String charset, int minLength, int maxLength) {
+    public StringProducer(String charset, int minLength, int maxLength) {
         if (maxLength < minLength) {
             throw new IllegalArgumentException("maxLength must be greater than minLength");
         }
@@ -39,7 +38,7 @@ public class StringProducer {
         chunkSize = allPerms.divideToIntegralValue(BigDecimal.valueOf(Math.pow(10, Math.log10(PERCENT) + DECIMAL_POINTS)));
     }
 
-    StringProducer(String charset, String mask, char maskCh) {
+    public StringProducer(String charset, String mask, char maskCh) {
         this.mask = mask.toCharArray();
         int unknownCount = 0;
         for (int i = 0; i < this.mask.length; i++) {
@@ -72,12 +71,11 @@ public class StringProducer {
         return false;
     }
 
-    public void getProgress() {
-        System.out.println(currPerm + "/" + allPerms);
-        System.out.println(currPerm
+    public double getProgress() {
+        return currPerm
                 .divide(allPerms, ACTUAL_PRECISION, RoundingMode.DOWN)
                 .multiply(BigDecimal.valueOf(PERCENT))
-                .setScale(DECIMAL_POINTS, RoundingMode.DOWN) + "%");
+                .setScale(DECIMAL_POINTS, RoundingMode.DOWN).doubleValue();
     }
 
     /// This function returns a String of the next permutation of set 'charset' and 'maxLength' constraints.
