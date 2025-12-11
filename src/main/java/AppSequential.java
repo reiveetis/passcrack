@@ -10,12 +10,13 @@ public class AppSequential {
     // "zzzzz", length = 5, MD5
     private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb8";
 
-    private static final Hasher.Algorithm TARGET_ALGO = Hasher.Algorithm.MD5;
+
+    private static final HashAlgorithm TARGET_ALGO = HashAlgorithm.MD5;
     private static final int MIN_LENGTH = 1;
     private static final int MAX_LENGTH = 5;
-//    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    private static final String CHARSET = "0123456789";
-    private static final boolean VERBOSE = true;
+    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+//    private static final String CHARSET = "0123456789";
+    private static final boolean VERBOSE = false;
     private static final boolean VERBOSE_WAIT_FOR_INPUT = false;
     private static final String MASK = "";
     private static final char MASK_CH = '.';

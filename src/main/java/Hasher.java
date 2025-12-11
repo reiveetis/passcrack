@@ -15,13 +15,8 @@ public class Hasher {
         }
     }
 
-    public enum Algorithm {
-        SHA256,
-        MD5
-    }
-
     /// This function returns a hashed byte[] of given String and Algorithm.
-    public static byte[] hash(String str, Algorithm algorithm) {
+    public static byte[] hash(String str, HashAlgorithm algorithm) {
         return switch (algorithm) {
             case SHA256 -> hashSHA256(str);
             case MD5 -> hashMD5(str);

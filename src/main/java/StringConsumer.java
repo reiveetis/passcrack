@@ -3,9 +3,9 @@ import java.util.HexFormat;
 
 public class StringConsumer {
     private final byte[] targetHash;
-    private final Hasher.Algorithm algorithm;
+    private final HashAlgorithm algorithm;
 
-    public StringConsumer(String targetHash, Hasher.Algorithm targetAlgorithm) {
+    public StringConsumer(String targetHash, HashAlgorithm targetAlgorithm) {
         // parse hex to byte[], because Hasher returns byte[]
         this.targetHash = HexFormat.of().parseHex(targetHash);
         this.algorithm = targetAlgorithm;
