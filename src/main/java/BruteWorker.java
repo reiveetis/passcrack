@@ -1,7 +1,6 @@
 import util.Logger;
 
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -11,17 +10,15 @@ public class BruteWorker extends Thread {
     private int currentLength;
     private final int maxLength;
     private final int maxChar;
-    private final StringBuilder strBuilder;
     private final int[] buffer;
     private final String charset;
     private BigInteger counter;
     private final int last;
-    private byte[] targetHash;
+    private final byte[] targetHash;
     private final HashAlgorithm algorithm;
 
     public BruteWorker(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start, BigInteger counter) {
         this.maxLength = maxLength;
-        this.strBuilder = new StringBuilder();
         this.charset = charset;
         this.maxChar = charset.length();
         this.counter = counter;
@@ -36,34 +33,46 @@ public class BruteWorker extends Thread {
         return Arrays.equals(currentHash, targetHash);
     }
 
+    public boolean matchToTarget(byte[] bytes) {
+        byte[] currentHash = hash(bytes, algorithm);
+        return Arrays.equals(currentHash, targetHash);
+    }
+
     /// This function returns a hashed byte[] of given String and Algorithm.
     public static byte[] hash(String str, HashAlgorithm algorithm) {
         return switch (algorithm) {
-            case SHA256 -> hashSHA256(str);
-            case MD5 -> hashMD5(str);
+            case SHA256 -> hashSHA256(str.getBytes());
+            case MD5 -> hashMD5(str.getBytes());
+        };
+    }
+
+    public static byte[] hash(byte[] bytes, HashAlgorithm algorithm) {
+        return switch (algorithm) {
+            case SHA256 -> hashSHA256(bytes);
+            case MD5 -> hashMD5(bytes);
         };
     }
 
     /// This function returns a SHA-256 hashed byte[] of given String.
-    public static byte[] hashSHA256(String str) {
+    public static byte[] hashSHA256(byte[] bytes) {
         MessageDigest sha256 = null;
         try {
             sha256 = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
             Logger.debug(e.getMessage());
         }
-        return sha256.digest(str.getBytes(StandardCharsets.UTF_8));
+        return sha256.digest(bytes);
     }
 
     /// This function returns an MD5 hashed byte[] of given String.
-    public static byte[] hashMD5(String str) {
+    public static byte[] hashMD5(byte[] bytes) {
         MessageDigest md5 = null;
         try {
             md5 = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
             Logger.debug(e.getMessage());
         }
-        return md5.digest(str.getBytes(StandardCharsets.UTF_8));
+        return md5.digest(bytes);
     }
 
     private int[] computeBuffer(BigInteger start) {
@@ -110,15 +119,16 @@ public class BruteWorker extends Thread {
                 break;
             }
 
-            // build string
-            strBuilder.setLength(0);
+            // build byte[]
+            byte[] bytes = new byte[currentLength];
+            int pos = 0;
             for (int i = maxLength - currentLength; i <= last; i++) {
-                strBuilder.append(charset.charAt(buffer[i]));
+                bytes[pos] = (byte)charset.charAt(buffer[i]);
+                pos++;
             }
 
-            // do stuff with string
-            if (matchToTarget(strBuilder.toString())) {
-                Logger.debug("Match: " + strBuilder);
+            if (matchToTarget(bytes)) {
+                Logger.debug("Match: " + new String(bytes));
                 AppThreaded.isMatchFound.set(true);
                 break;
             }
