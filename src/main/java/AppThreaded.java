@@ -6,9 +6,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class AppThreaded {
     // "zzzzz", length = 5, MD5
-    private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb8";
+//    private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb8";
 
-//    private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb7";
+    private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb7";
 
     // "1945hr", length 6, MD5
 //    private static final String TARGET = "71e50ae29377c232b34b79a7b5900c01";
@@ -20,11 +20,11 @@ public class AppThreaded {
     private static final HashAlgorithm TARGET_ALGO = HashAlgorithm.MD5;
 
     private static final int MIN_LENGTH = 1;
-    private static final int MAX_LENGTH = 5;
-    private static final int THREADS = 20;
-    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final int MAX_LENGTH = 3;
+    private static final int THREADS = 10;
+//    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 //    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
-//    private static final String CHARSET = "0123456789";
+    private static final String CHARSET = "0123456789";
     private static BigInteger allPerms = BigInteger.ZERO;
     public static AtomicInteger finished = new AtomicInteger(0);
     public static AtomicBoolean isMatchFound = new AtomicBoolean(false);
@@ -42,6 +42,8 @@ public class AppThreaded {
         calculateAllPermutations();
         BigInteger chunk = allPerms.divide(BigInteger.valueOf(THREADS));
         BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(THREADS));
+        Logger.debug("Chunk: " + chunk);
+        Logger.debug("ChunkRem: " + chunkRem);
         for (int i = 0; i < THREADS; i++) {
             BigInteger count = chunk;
             if (i == THREADS - 1) {

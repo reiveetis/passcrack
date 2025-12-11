@@ -76,6 +76,7 @@ public class BruteWorker extends Thread {
     }
 
     private int[] computeBuffer(BigInteger start) {
+//        System.out.println("start: " + start);
         int[] result = new int[maxLength];
         if (start.equals(BigInteger.ZERO)) {
             currentLength = 1;
@@ -83,7 +84,9 @@ public class BruteWorker extends Thread {
         }
 
         BigInteger skip = BigInteger.valueOf(maxChar);
+        int skipCnt = 0;
         while (start.compareTo(skip) > 0) {
+            skipCnt++;
             start = start.subtract(skip);
             skip = skip.multiply(BigInteger.valueOf(maxChar));
         }
@@ -96,6 +99,11 @@ public class BruteWorker extends Thread {
             currentLength++;
             start = start.divide(BigInteger.valueOf(maxChar));
         }
+
+        // adjust for edge case of currentLength being incorrect
+        currentLength = skipCnt + 1;
+
+//        System.out.println(Arrays.toString(result));
         return result;
     }
 
@@ -107,7 +115,7 @@ public class BruteWorker extends Thread {
 
     @Override
     public void run() {
-        Logger.info("Started!");
+//        Logger.info("Started!");
         while (true) {
             if (AppThreaded.isMatchFound.get()) {
                 break;
@@ -126,6 +134,8 @@ public class BruteWorker extends Thread {
                 bytes[pos] = (byte)charset.charAt(buffer[i]);
                 pos++;
             }
+
+            System.out.println(new String(bytes));
 
             if (matchToTarget(bytes)) {
                 Logger.debug("Match: " + new String(bytes));
@@ -157,7 +167,7 @@ public class BruteWorker extends Thread {
 
         // stupid "barrier" for main termination
         AppThreaded.finished.addAndGet(1);
-        Logger.info("Done!");
+//        Logger.info("Done!");
     }
 
 }
