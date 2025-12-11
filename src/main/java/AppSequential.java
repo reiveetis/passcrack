@@ -13,8 +13,9 @@ public class AppSequential {
     private static final Hasher.Algorithm TARGET_ALGO = Hasher.Algorithm.MD5;
     private static final int MIN_LENGTH = 1;
     private static final int MAX_LENGTH = 5;
-    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    private static final boolean VERBOSE = false;
+//    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final String CHARSET = "0123456789";
+    private static final boolean VERBOSE = true;
     private static final boolean VERBOSE_WAIT_FOR_INPUT = false;
     private static final String MASK = "";
     private static final char MASK_CH = '.';
@@ -39,9 +40,9 @@ public class AppSequential {
         }
         String str = strProd.produceNext();
         while (str != null) {
-            if (strProd.shouldShowProgress()) {
-                System.out.println(strProd.getProgress() + "%");
-            }
+//            if (strProd.shouldShowProgress()) {
+//                System.out.println(strProd.getProgress() + "%");
+//            }
             if (VERBOSE) {
                 System.out.println("Trying: " + str);
                 if (VERBOSE_WAIT_FOR_INPUT) {
