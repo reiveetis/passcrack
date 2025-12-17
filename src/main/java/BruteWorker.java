@@ -12,16 +12,17 @@ public class BruteWorker extends Thread {
     private final int maxChar;
     private final int[] buffer;
     private final String charset;
-    private BigInteger counter;
+    private BigInteger limit;
+    private BigInteger counter = BigInteger.ZERO;
     private final int last;
     private final byte[] targetHash;
     private final HashAlgorithm algorithm;
 
-    public BruteWorker(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start, BigInteger counter) {
+    public BruteWorker(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start, BigInteger limit) {
         this.maxLength = maxLength;
         this.charset = charset;
         this.maxChar = charset.length();
-        this.counter = counter;
+        this.limit = limit;
         this.buffer = computeBuffer(start);
         this.last = maxLength - 1;
         this.targetHash = HexFormat.of().parseHex(targetHash);
@@ -85,7 +86,7 @@ public class BruteWorker extends Thread {
 
         BigInteger skip = BigInteger.valueOf(maxChar);
         int skipCnt = 0;
-        while (start.compareTo(skip) > 0) {
+        while (start.compareTo(skip) >= 0) {
             skipCnt++;
             start = start.subtract(skip);
             skip = skip.multiply(BigInteger.valueOf(maxChar));
@@ -120,9 +121,12 @@ public class BruteWorker extends Thread {
             if (AppThreaded.isMatchFound.get()) {
                 break;
             }
-            if (counter.compareTo(BigInteger.ZERO) <= 0) {
+            if (counter.compareTo(limit) >= 0) {
                 break;
             }
+//            if (limit.compareTo(BigInteger.ZERO) <= 0) {
+//                break;
+//            }
             if (buffer[0] == maxChar) {
                 break;
             }
@@ -135,7 +139,9 @@ public class BruteWorker extends Thread {
                 pos++;
             }
 
-            System.out.println(new String(bytes));
+//            String str = new String(bytes);
+//            System.out.println(str);
+//            AppThreaded.addResult(str);
 
             if (matchToTarget(bytes)) {
                 Logger.debug("Match: " + new String(bytes));
@@ -145,7 +151,8 @@ public class BruteWorker extends Thread {
 
             // increase/decrease
             buffer[last]++;
-            counter = counter.subtract(BigInteger.ONE);
+//            limit = limit.subtract(BigInteger.ONE);
+            counter = counter.add(BigInteger.ONE);
 
             // carryover
             int i = last;
@@ -165,9 +172,10 @@ public class BruteWorker extends Thread {
             }
         }
 
+        AppThreaded.addProgress(counter);
+//        Logger.info("Done!");
         // stupid "barrier" for main termination
         AppThreaded.finished.addAndGet(1);
-//        Logger.info("Done!");
     }
 
 }
