@@ -1,10 +1,7 @@
 import util.Logger;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class AppThreaded {
     // "zzzzz", length = 5, MD5
@@ -31,8 +28,7 @@ public class AppThreaded {
 //    private static final String CHARSET = "0123456789";
     private static BigInteger allPerms = BigInteger.ZERO;
     private static BigInteger progress = BigInteger.ZERO;
-    public static AtomicInteger finished = new AtomicInteger(0);
-    public static AtomicBoolean isMatchFound = new AtomicBoolean(false);
+//    public static AtomicInteger finished = new AtomicInteger(0);
     public static CountDownLatch finishedLatch;
 
     public static synchronized void addProgress(BigInteger counter) {
@@ -66,12 +62,22 @@ public class AppThreaded {
         UI ui = new UI(allPerms);
 
         int fragments = 100;
+        finishedLatch = new CountDownLatch(fragments);
 
         BigInteger chunk = allPerms.divide(BigInteger.valueOf(fragments));
         BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(fragments));
-        ui.start();
+
+//        ui.start();
+
+        // TODO: instead of this, make a queue
+        // TODO: block with synchronizer until all cores have jobs
+
+        // TODO: once queue is implemented, start threads from beginning, middle and end fragments
+        // TODO: this way we have a better chance at guessing the hash
+        // TODO: we could shuffle fragments in this order: B,M,E,B,M,E... (Beginning, Middle, End)
+        // TODO: that means we have to divide whole set by 3
         for (int i = 0; i < fragments; i++) {
-            if (isMatchFound.get()) { break;}
+            if (finishedLatch.getCount() == 0) { break; }
             BigInteger count = chunk;
             if (i == fragments - 1) {
                 count = count.add(chunkRem);
@@ -82,21 +88,25 @@ public class AppThreaded {
                     CHARSET,
                     MAX_LENGTH,
                     chunk.multiply(BigInteger.valueOf(i)),
-                    count
+                    count,
+                    finishedLatch
             ).start();
-            while (Math.abs(i + 1 - finished.get()) == THREADS) {
+            while (Math.abs(i + 1 - finishedLatch.getCount()) == THREADS) {
                 // block while all threads busy
             }
         }
 
         // barrier
-        while (true) {
-            if (isMatchFound.get()) { break;}
-            if (finished.get() == fragments) { break;}
+        try {
+            finishedLatch.await();
+        } catch (InterruptedException e) {
+            Logger.error(e.getMessage());
         }
+
         ui.shouldStop.set(true);
 
 //        System.out.println(allPerms.intValue() == results.size());
+
         System.out.println(progress + "/" + allPerms);
 
         long end = System.currentTimeMillis();

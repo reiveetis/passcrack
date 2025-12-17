@@ -21,7 +21,7 @@ public class UI extends Thread {
         while (!shouldStop.get()) {
             try {
                 update();
-                sleep(5000);
+                sleep(1000);
             } catch (InterruptedException e) {
                 Logger.debug(e.getMessage());
             }
