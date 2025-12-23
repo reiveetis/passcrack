@@ -13,9 +13,9 @@ public class AppSequential {
 
     private static final HashAlgorithm TARGET_ALGO = HashAlgorithm.MD5;
     private static final int MIN_LENGTH = 1;
-    private static final int MAX_LENGTH = 5;
-    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-//    private static final String CHARSET = "0123456789";
+    private static final int MAX_LENGTH = 4;
+//    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final String CHARSET = "0123456789";
     private static final boolean VERBOSE = false;
     private static final boolean VERBOSE_WAIT_FOR_INPUT = false;
     private static final String MASK = "";
@@ -28,7 +28,7 @@ public class AppSequential {
     // - hash bank would need a trie
     // - rockyou.txt
     // - check when it's worth using hash bank vs. brute force
-    static void main(String[] args) {
+    public static void main(String[] args) {
         long start = System.currentTimeMillis();
         Scanner sc = new Scanner(System.in);
         System.out.println("Computing for: " + TARGET);

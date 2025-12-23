@@ -5,22 +5,22 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable;
 
-public class BruteWorker extends Thread {
+public class BruteForceTask implements Callable<Boolean> {
     private int currentLength;
     private final int maxLength;
     private final int maxChar;
     private final int[] buffer;
     private final String charset;
-    private BigInteger limit;
+    private final BigInteger limit;
     private BigInteger counter = BigInteger.ZERO;
     private final int last;
     private final byte[] targetHash;
     private final HashAlgorithm algorithm;
-    private final CountDownLatch countDownLatch;
+    private final BruteForceManager manager;
 
-    public BruteWorker(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start, BigInteger limit, CountDownLatch countDownLatch) {
+    public BruteForceTask(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start, BigInteger limit, BruteForceManager manager) {
         this.maxLength = maxLength;
         this.charset = charset;
         this.maxChar = charset.length();
@@ -29,7 +29,7 @@ public class BruteWorker extends Thread {
         this.last = maxLength - 1;
         this.targetHash = HexFormat.of().parseHex(targetHash);
         this.algorithm = algorithm;
-        this.countDownLatch = countDownLatch;
+        this.manager = manager;
     }
 
     public boolean matchToTarget(String str) {
@@ -118,9 +118,18 @@ public class BruteWorker extends Thread {
     }
 
     @Override
-    public void run() {
+    public Boolean call() {
 //        Logger.info("Started!");
-        while (countDownLatch.getCount() > 0) {
+
+        boolean isProgressUpdated = false;
+        while (!manager.isMatchFound) {
+            if (manager.updateProgressLatch.getCount() > 0 && !isProgressUpdated) {
+                manager.addCurrentProgress(counter);
+                isProgressUpdated = true;
+            } else if (manager.updateProgressLatch.getCount() == 0 && isProgressUpdated) {
+                isProgressUpdated = false;
+            }
+
             // build byte[]
             byte[] bytes = new byte[currentLength];
             int pos = 0;
@@ -135,18 +144,19 @@ public class BruteWorker extends Thread {
 
             if (matchToTarget(bytes)) {
                 Logger.debug("Match: " + new String(bytes));
-                long n = countDownLatch.getCount();
+                manager.isMatchFound = true;
+                long n = manager.updateProgressLatch.getCount();
 
                 // kill latch
+                Logger.info("Killing latch...");
                 for (long i = 0; i < n; i++) {
-                    countDownLatch.countDown();
+                    manager.updateProgressLatch.countDown();
                 }
                 break;
             }
 
             // increase/decrease
             buffer[last]++;
-//            limit = limit.subtract(BigInteger.ONE);
             counter = counter.add(BigInteger.ONE);
 
             if (counter.compareTo(limit) >= 0) {
@@ -171,8 +181,11 @@ public class BruteWorker extends Thread {
             }
         }
 
-        AppThreaded.addProgress(counter);
+        manager.addTotalProgress(counter);
+        if (manager.updateProgressLatch.getCount() > 0 && !isProgressUpdated) {
+            manager.updateProgressLatch.countDown();
+        }
 //        Logger.info("Done!");
-        countDownLatch.countDown();
+        return true;
     }
 }
