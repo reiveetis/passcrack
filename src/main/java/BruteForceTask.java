@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 
 public class BruteForceTask implements Callable<Boolean> {
     private int currentLength;
@@ -145,13 +146,10 @@ public class BruteForceTask implements Callable<Boolean> {
             if (matchToTarget(bytes)) {
                 Logger.debug("Match: " + new String(bytes));
                 manager.isMatchFound = true;
-                long n = manager.updateProgressLatch.getCount();
 
                 // kill latch
                 Logger.info("Killing latch...");
-                for (long i = 0; i < n; i++) {
-                    manager.updateProgressLatch.countDown();
-                }
+                manager.killLatch();
                 break;
             }
 

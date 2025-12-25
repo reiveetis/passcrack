@@ -22,6 +22,20 @@ public class BruteForceManager {
         this.LATCH_SIZE = latchSize;
     }
 
+    public void killLatch() {
+        if (updateProgressLatch.getCount() == 0) {
+            return;
+        }
+        while (updateProgressLatch.getCount() > 0) {
+            updateProgressLatch.countDown();
+        }
+    }
+
+    public void shutdown() {
+        isMatchFound = true;
+        killLatch();
+    }
+
     public void resetCurrentProgress() {
         currRw.writeLock().lock();
         this.currentProgress = BigInteger.ZERO;
@@ -59,11 +73,10 @@ public class BruteForceManager {
         }
     }
 
-    // how to get active task count from pool?
-    // what if 1 task gets killed before we count down to 0?
-    // what if we find match before we count down to 0?
     public void prepareProgressUpdate() {
-        if (isMatchFound) { return; }
+        if (isMatchFound) {
+            return;
+        }
         updateProgressLatch = new CountDownLatch(LATCH_SIZE);
     }
 

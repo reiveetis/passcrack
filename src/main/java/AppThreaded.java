@@ -32,8 +32,9 @@ public class AppThreaded {
 //    private static final String CHARSET = "0123456789";
     private static BigInteger allPerms = BigInteger.ZERO;
 
-    private static ArrayList<String> results = new ArrayList<>();
+    private static BruteForceManager manager;
 
+    private static ArrayList<String> results = new ArrayList<>();
 //    public static synchronized void addResult(String result) {
 //        if (results.contains(result)) {
 //            Logger.error("Duplicated result: " + result);
@@ -48,6 +49,13 @@ public class AppThreaded {
         }
     }
 
+    public static void shutdown() {
+        if (manager == null) {
+            return;
+        }
+        manager.shutdown();
+    }
+
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
         Logger.info("Started!");
@@ -59,8 +67,8 @@ public class AppThreaded {
         BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(fragments));
 
         int latchSize = Math.min(fragments, THREADS);
+        manager = new BruteForceManager(latchSize);
 
-        BruteForceManager manager = new BruteForceManager(latchSize);
         UI ui = new UI(allPerms, manager, 1000);
 
         ArrayList<Callable<Boolean>> tasks = new ArrayList<>();
@@ -86,13 +94,9 @@ public class AppThreaded {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {
-            ui.shouldStop.set(true);
-
-            // hacky way of preventing a deadlock
-            long n = manager.updateProgressLatch.getCount();
-            for (long i = 0; i < n; i++) {
-                manager.updateProgressLatch.countDown();
-            }
+            ui.shutdown();
+            // make sure that updateProgressLatch is dead to prevent deadlock!
+            manager.killLatch();
         }
 
         long end = System.currentTimeMillis();
