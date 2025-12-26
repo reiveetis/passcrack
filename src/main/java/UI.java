@@ -18,7 +18,6 @@ public class UI extends Thread {
 
 
     public UI(BigInteger total, BruteForceManager manager, int updateMs) {
-        Thread.currentThread().setName("UI");
         this.total = total;
         this.manager = manager;
         this.UPDATE_MS = updateMs;
