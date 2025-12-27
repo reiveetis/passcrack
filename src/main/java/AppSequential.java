@@ -5,17 +5,17 @@ public class AppSequential {
 //    private static final String TARGET = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
     // "hello", length = 5, MD5
-//    private static final String TARGET = "5d41402abc4b2a76b9719d911017c592";
+    private static final String TARGET = "5d41402abc4b2a76b9719d911017c592";
 
     // "zzzzz", length = 5, MD5
-    private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb8";
+//    private static final String TARGET = "95ebc3c7b3b9f1d2c40fec14415d3cb8";
 
 
     private static final HashAlgorithm TARGET_ALGO = HashAlgorithm.MD5;
     private static final int MIN_LENGTH = 1;
-    private static final int MAX_LENGTH = 4;
+    private static final int MAX_LENGTH = 5;
 //    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    private static final String CHARSET = "0123456789";
+    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final boolean VERBOSE = false;
     private static final boolean VERBOSE_WAIT_FOR_INPUT = false;
     private static final String MASK = "";

@@ -26,6 +26,8 @@ public class AppThreaded {
 
     private static final int MIN_LENGTH = 1;
     private static final int MAX_LENGTH = 6;
+    private static final String MASK = "";
+    private static final char MASK_CH = '?';
     private static final int THREADS = Runtime.getRuntime().availableProcessors();
 //    private static final String CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final String CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -35,18 +37,31 @@ public class AppThreaded {
     private static BruteForceManager manager;
 
     private static ArrayList<String> results = new ArrayList<>();
-//    public static synchronized void addResult(String result) {
-//        if (results.contains(result)) {
-//            Logger.error("Duplicated result: " + result);
-//        }
-//        results.add(result);
-//    }
-
-    private static void calculateAllPermutations() {
-        int maxChar = CHARSET.length();
-        for (int i = MIN_LENGTH; i <= MAX_LENGTH; i++) {
-            allPerms = allPerms.add(BigInteger.valueOf(maxChar).pow(i));
+    public static synchronized void addResult(String result) {
+        if (results.contains(result)) {
+            Logger.error("Duplicated result: " + result);
         }
+        results.add(result);
+    }
+
+    private static BigInteger calculateAllPermutations(int min, int max, int maxCh) {
+        BigInteger result = BigInteger.ZERO;
+        for (int i = min; i <= max; i++) {
+            result = result.add(BigInteger.valueOf(maxCh).pow(i));
+        }
+        return result;
+    }
+
+    private static BigInteger calculateAllPermutations(String mask, char maskCh, int maxCh) {
+        BigInteger result = BigInteger.ZERO;
+        int unk = 0;
+        for (int i = 0; i < mask.length(); i++) {
+            if (mask.charAt(i) == maskCh) {
+                unk++;
+            }
+        }
+        result = result.add(BigInteger.valueOf(maxCh).pow(unk));
+        return result;
     }
 
     public static void shutdown() {
@@ -60,7 +75,14 @@ public class AppThreaded {
         long start = System.currentTimeMillis();
         Logger.info("Started!");
         ExecutorService pool = Executors.newFixedThreadPool(THREADS);
-        calculateAllPermutations();
+
+        int maxCh = CHARSET.length();
+        if (MASK.isEmpty()) {
+            allPerms = calculateAllPermutations(MIN_LENGTH, MAX_LENGTH, maxCh);
+        } else {
+            allPerms = calculateAllPermutations(MASK, MASK_CH, maxCh);
+        }
+
         int fragments = 100;
 
         BigInteger chunk = allPerms.divide(BigInteger.valueOf(fragments));
@@ -77,15 +99,28 @@ public class AppThreaded {
             if (i == fragments - 1) {
                 count = count.add(chunkRem);
             }
-            tasks.add(new BruteForceTask(
-                    TARGET,
-                    TARGET_ALGO,
-                    CHARSET,
-                    MAX_LENGTH,
-                    chunk.multiply(BigInteger.valueOf(i)),
-                    count,
-                    manager
-            ));
+            if (MASK.isEmpty()) {
+                tasks.add(new BruteForceTask(
+                        TARGET,
+                        TARGET_ALGO,
+                        CHARSET,
+                        MAX_LENGTH,
+                        chunk.multiply(BigInteger.valueOf(i)),
+                        count,
+                        manager
+                ));
+            } else {
+                tasks.add(new BruteForceTask(
+                        TARGET,
+                        TARGET_ALGO,
+                        CHARSET,
+                        MASK,
+                        MASK_CH,
+                        chunk.multiply(BigInteger.valueOf(i)),
+                        count,
+                        manager
+                ));
+            }
         }
 
         try {

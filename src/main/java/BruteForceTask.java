@@ -20,8 +20,10 @@ public class BruteForceTask implements Callable<Boolean> {
     private final byte[] targetHash;
     private final HashAlgorithm algorithm;
     private final BruteForceManager manager;
+    private char[] mask = null;
 
-    public BruteForceTask(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start, BigInteger limit, BruteForceManager manager) {
+    public BruteForceTask(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start,
+                          BigInteger limit, BruteForceManager manager) {
         this.maxLength = maxLength;
         this.charset = charset;
         this.maxChar = charset.length();
@@ -31,6 +33,42 @@ public class BruteForceTask implements Callable<Boolean> {
         this.targetHash = HexFormat.of().parseHex(targetHash);
         this.algorithm = algorithm;
         this.manager = manager;
+    }
+
+    public BruteForceTask(String targetHash, HashAlgorithm algorithm, String charset, String mask, char maskCh,
+                          BigInteger start, BigInteger limit, BruteForceManager manager) {
+        this.mask = mask.toCharArray();
+        for (int i = 0; i < this.mask.length; i++) {
+            if (this.mask[i] == maskCh) {
+                this.mask[i] = 0;
+                this.currentLength++;
+            }
+        }
+        this.maxLength = currentLength;
+        this.charset = charset;
+        this.maxChar = charset.length();
+        this.limit = limit;
+        this.buffer = computeMaskBuffer(start);
+        this.last = currentLength - 1;
+        this.targetHash = HexFormat.of().parseHex(targetHash);
+        this.algorithm = algorithm;
+        this.manager = manager;
+    }
+
+    private int[] computeMaskBuffer(BigInteger start) {
+        int[] result = new int[maxLength];
+        if (start.equals(BigInteger.ZERO)) {
+            return result;
+        }
+
+        int index = maxLength - 1;
+        while (start.compareTo(BigInteger.ZERO) > 0) {
+            int tmp = start.mod(BigInteger.valueOf(maxChar)).intValue();
+            result[index] = tmp;
+            index--;
+            start = start.divide(BigInteger.valueOf(maxChar));
+        }
+        return result;
     }
 
     public boolean matchToTarget(String str) {
@@ -132,11 +170,25 @@ public class BruteForceTask implements Callable<Boolean> {
             }
 
             // build byte[]
-            byte[] bytes = new byte[currentLength];
-            int pos = 0;
-            for (int i = maxLength - currentLength; i <= last; i++) {
-                bytes[pos] = (byte)charset.charAt(buffer[i]);
-                pos++;
+            byte[] bytes;
+            if (mask == null) {
+                bytes = new byte[currentLength];
+                int pos = 0;
+                for (int i = maxLength - currentLength; i <= last; i++) {
+                    bytes[pos] = (byte)charset.charAt(buffer[i]);
+                    pos++;
+                }
+            } else {
+                bytes = new byte[mask.length];
+                int pos = 0;
+                for (int i = 0; i < mask.length; i++) {
+                    if (mask[i] == 0) {
+                        bytes[i] = (byte)charset.charAt(buffer[pos]);
+                        pos++;
+                    } else {
+                        bytes[i] = (byte)mask[i];
+                    }
+                }
             }
 
 //            String str = new String(bytes);
