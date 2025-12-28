@@ -1,4 +1,4 @@
-public enum ApproachType {
+public enum ProgramType {
     SEQUENTIAL,
     THREADED,
     CUDA
