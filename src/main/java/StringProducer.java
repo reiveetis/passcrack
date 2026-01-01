@@ -51,6 +51,10 @@ public class StringProducer {
         }
     }
 
+    public BigInteger getCurrPerm() {
+        return currPerm;
+    }
+
     public BigInteger getProgress() {
         return currPerm;
     }

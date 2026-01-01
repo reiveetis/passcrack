@@ -16,7 +16,6 @@ public class UI extends Thread {
     public AtomicBoolean shouldStop;
     private final Scanner sc = new Scanner(System.in);
 
-
     public UI(BigInteger total, BruteForceManager manager, int updateMs) {
         this.total = total;
         this.manager = manager;
@@ -42,14 +41,14 @@ public class UI extends Thread {
     public void run() {
         scheduler.scheduleAtFixedRate(() -> {
             if (shouldStop.get()) {
-                scheduler.shutdown();
+                scheduler.shutdownNow();
                 return;
             }
             try {
                 update();
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
                 Logger.error(e.getMessage());
+                Thread.currentThread().interrupt();
             }
         }, UPDATE_MS, UPDATE_MS, TimeUnit.MILLISECONDS);
 

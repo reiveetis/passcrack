@@ -9,7 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class App {
-    private final static boolean DEBUG = false;
+    private final static boolean DEBUG = true;
     private static final String STRING_09 = "[0-9]";
     private static final String STRING_AZ_L = "[a-z]";
     private static final String STRING_AZ_U = "[A-Z]";
@@ -68,6 +68,8 @@ public class App {
     private static boolean isVerbose = false;
     private static BruteForceManager manager;
 
+    private static int testFragments = 20;
+
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
         if (!DEBUG) {
@@ -78,13 +80,14 @@ public class App {
             parseArgs(args);
         } else {
             Logger.debug("!!! RUNNING IN DEBUG MODE !!!");
-            type = ProgramType.CUDA;
+            type = ProgramType.THREADED;
             algo = HashAlgorithm.MD5;
             // "1945hr"
             hash = "71e50ae29377c232b34b79a7b5900c01";
             mask = "";
             charset = buildCharset("[a-z][0-9]");
-            max = 5;
+            max = 6;
+//            dictPath = "./dict/rockyou.txt";
         }
 
         System.out.println("threads: " + THREADS);
@@ -192,7 +195,7 @@ public class App {
         long end = System.currentTimeMillis();
         long time = end - start;
 
-        printStats(time, dictTime, allPerms);
+        printStats(time, dictTime, manager.getTotalProgress());
         // not counting shutdown into runtime, since it takes a really long time
         pool.shutdown();
     }
@@ -228,13 +231,13 @@ public class App {
         }
         long end = System.currentTimeMillis();
         long time = end - start;
-        printStats(time, dictTime, allPerms);
+        printStats(time, dictTime, strProd.getCurrPerm());
     }
 
-    private static void printStats(long time, long dictTime, BigInteger allPerms) {
+    private static void printStats(long time, long dictTime, BigInteger tries) {
         Logger.info("Finished in: " + time + " ms");
-        Logger.info("Total attempts: " + allPerms);
-        Logger.info("Hashing speed: " + allPerms.divide(BigInteger.valueOf(time - dictTime)).divide(BigInteger.valueOf(1000)) + " MH/s");
+        Logger.info("Total attempts: " + tries);
+        Logger.info("Hashing speed: " + tries.divide(BigInteger.valueOf(time - dictTime)).divide(BigInteger.valueOf(1000)) + " MH/s");
         Logger.info("Shutting down...");
     }
 
