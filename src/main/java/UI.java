@@ -40,7 +40,6 @@ public class UI extends Thread {
 
     @Override
     public void run() {
-        Logger.info("Started!");
         scheduler.scheduleAtFixedRate(() -> {
             if (shouldStop.get()) {
                 scheduler.shutdown();
@@ -55,7 +54,5 @@ public class UI extends Thread {
         }, UPDATE_MS, UPDATE_MS, TimeUnit.MILLISECONDS);
 
         // TODO: implement input
-
-        Logger.info("Shutting down...");
     }
 }

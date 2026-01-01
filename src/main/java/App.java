@@ -1,5 +1,7 @@
 import util.Logger;
 
+import java.io.File;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -7,47 +9,64 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class App {
-    private final static boolean DEBUG = true;
+    private final static boolean DEBUG = false;
+    private static final String STRING_09 = "[0-9]";
+    private static final String STRING_AZ_L = "[a-z]";
+    private static final String STRING_AZ_U = "[A-Z]";
+    private static final int THREADS = Runtime.getRuntime().availableProcessors();
+    private static final int UPDATE_MS = 1000;
+    private static final int DEFAULT_MAX = 6;
+    private static final int DEFAULT_MIN = 1;
+    private static final char DEFAULT_MASK_CH = '?';
+    private static final String DEFAULT_CHARSET = STRING_AZ_L + STRING_09;
 
     private final static String[] OPTIONS = {
-            "-t, --type <s|t|c>",
-            "-a, --algo <MD5|SHA256>",
+            "-s",
+            "-t",
+            "-g",
+            "--md5",
+            "--sha256",
             "--hash <HASH>",
-            "-m, --mask <MASK>",
-            "-l, --length <LENGTH>",
             "-c, --charset <CHARSET>",
+            "-d, --dict <PATH_TO_FILE>",
+            "-m, --mask <MASK>",
+            "--mask-ch <CHAR>",
+            "--max-len <LENGTH>",
+            "--min-len <LENGTH>",
             "-v, --verbose",
             "-h, --help"
     };
 
     private final static String[] OPTION_DESC = {
-            "Select program type: 's' (sequential), 't' (threaded), 'c' (cuda).",
-            "Select hash encryption algorithm: 'MD5' or 'SHA256'.",
+            "Run program in sequential mode.",
+            "Run program in threaded mode (uses all system threads).",
+            "Run program in GPU (CUDA) mode.",
+            "Select encryption algorithm MD5.",
+            "Select encryption algorithm SHA-256.",
             "Input hash to be cracked.",
-            "Mask out known characters. Example: '-m user????', this will only generate permutations for " +
-                    "unknown characters '?' with the specified charset.",
-            "Max length for password. If mask is set, max length = mask length.",
             "Charset to use for password cracking. Available macros: '[A-Z]', '[a-z]', '[0-9]', everything " +
-                    "else is going to be parsed as a separate character. Example: '-c [a-z][A-Z][0-9]!?@#$'",
+                    "else is going to be parsed as a separate character. Default value is '"+ DEFAULT_CHARSET +"'. Example: '-c [a-z][A-Z][0-9]!?@#$'",
+            "Dictionary attack. Input a path to a plain text file with passwords.",
+            "Mask out known characters. Default mask character: '" + DEFAULT_MASK_CH + "'. Example: '-m user????', this will only generate permutations for " +
+                    "unknown characters '?' with the specified charset.",
+            "Set mask character to the specified character.",
+            "Max length for password. Default value is "+ DEFAULT_MAX +". If mask is set, max length = mask length.",
+            "Min length for password. Default value is "+ DEFAULT_MIN +". If mask is set, min length = mask length.",
             "Print out every single permutation. VERY SLOW!",
             "Show this screen."
     };
 
-    private static final String STRING_09 = "[0-9]";
-    private static final String STRING_AZ_L = "[a-z]";
-    private static final String STRING_AZ_U = "[A-Z]";
-    private static final int THREADS = Runtime.getRuntime().availableProcessors();
-    public static final int UPDATE_MS = 1000;
     private static String charset = buildCharset(STRING_AZ_L + STRING_09);
     private static String hash = "";
     private static ProgramType type = null;
     private static HashAlgorithm algo = null;
     private static String mask = "";
-    private static char maskCh = '?';
-    private static int max = 6;
-    private static int min = 1;
+    private static String dictPath = "";
+    private static char maskCh = DEFAULT_MASK_CH;
+    private static int max = DEFAULT_MAX;
+    private static int min = DEFAULT_MIN;
     private static boolean isVerbose = false;
-    public static BruteForceManager manager;
+    private static BruteForceManager manager;
 
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
@@ -59,13 +78,13 @@ public class App {
             parseArgs(args);
         } else {
             Logger.debug("!!! RUNNING IN DEBUG MODE !!!");
-            type = ProgramType.SEQUENTIAL;
+            type = ProgramType.CUDA;
             algo = HashAlgorithm.MD5;
             // "1945hr"
             hash = "71e50ae29377c232b34b79a7b5900c01";
             mask = "";
             charset = buildCharset("[a-z][0-9]");
-            max = 0;
+            max = 5;
         }
 
         System.out.println("threads: " + THREADS);
@@ -75,26 +94,41 @@ public class App {
         System.out.println("mask: " + mask);
         System.out.println("charset: " + charset);
         System.out.println("length: " + max);
+        System.out.println("dictPath: " + dictPath);
 
-        if (!isSetupValid()) {
+        if (!canRun()) {
             Logger.error("Missing parameters!");
             printHelp();
-            System.exit(-1);
+            System.exit(1);
+        }
+
+        long dictTime = 0;
+        if (!dictPath.isEmpty()) {
+            try {
+                long dictStart = System.currentTimeMillis();
+                if (DictionaryAttack.start(hash, algo, dictPath)) {
+                    dictTime = System.currentTimeMillis() - dictStart;
+                    Logger.info("Finished in " + dictTime + " ms");
+                    return;
+                }
+            } catch (IOException e) {
+                Logger.error(e.getMessage());
+            }
         }
 
         if (type.equals(ProgramType.SEQUENTIAL)) {
-            runSequential(start);
+            runSequential(start, dictTime);
         } else if (type.equals(ProgramType.THREADED)) {
-            runThreaded(start);
+            runThreaded(start, dictTime);
         } else if (type.equals(ProgramType.CUDA)) {
-            runCuda(start);
+            runCuda(start, dictTime);
         }
     }
 
-    private static void runCuda(long start) {
+    private static void runCuda(long start, long dictTime) {
     }
 
-    private static void runThreaded(long start) {
+    private static void runThreaded(long start, long dictTime) {
         Logger.info("Started in threaded mode...");
         ExecutorService pool = Executors.newFixedThreadPool(THREADS);
 
@@ -107,7 +141,7 @@ public class App {
         }
 
         // TODO: find/calculate best fragment size
-        int fragments = 20;
+        int fragments = 100;
         int latchSize = Math.min(fragments, THREADS);
         BigInteger chunk = allPerms.divide(BigInteger.valueOf(fragments));
         BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(fragments));
@@ -158,16 +192,13 @@ public class App {
         long end = System.currentTimeMillis();
         long time = end - start;
 
-        Logger.info("Finished in " + time + " ms");
-        Logger.info("Total attempts: " + manager.getTotalProgress());
-        Logger.info(manager.getTotalProgress().divide(BigInteger.valueOf(time)).divide(BigInteger.valueOf(1000)) + " MH/s");
-        Logger.info("Shutting down...");
-
+        printStats(time, dictTime, allPerms);
         // not counting shutdown into runtime, since it takes a really long time
         pool.shutdown();
     }
 
-    private static void runSequential(long start) {
+
+    private static void runSequential(long start, long dictTime) {
         Logger.info("Started in sequential mode...");
         Logger.info("Computing for: " + hash);
         StringConsumer strCons = new StringConsumer(hash, algo);
@@ -177,8 +208,15 @@ public class App {
         } else {
             strProd = new StringProducer(charset, mask, maskCh);
         }
+        BigInteger allPerms = strProd.getAllPermutations();
+        long timerStart = System.currentTimeMillis();
         String str = strProd.produceNext();
         while (str != null) {
+            long timerEnd = System.currentTimeMillis();
+            if (timerEnd - timerStart > UPDATE_MS) {
+                timerStart = timerEnd;
+                System.out.println(strProd.getProgress() + "/" + allPerms);
+            }
             if (isVerbose) {
                 System.out.println("Trying: " + str);
             }
@@ -189,10 +227,18 @@ public class App {
             str = strProd.produceNext();
         }
         long end = System.currentTimeMillis();
-        Logger.info("Finished in " + (end - start) + " ms");
+        long time = end - start;
+        printStats(time, dictTime, allPerms);
     }
 
-    private static boolean isSetupValid() {
+    private static void printStats(long time, long dictTime, BigInteger allPerms) {
+        Logger.info("Finished in: " + time + " ms");
+        Logger.info("Total attempts: " + allPerms);
+        Logger.info("Hashing speed: " + allPerms.divide(BigInteger.valueOf(time - dictTime)).divide(BigInteger.valueOf(1000)) + " MH/s");
+        Logger.info("Shutting down...");
+    }
+
+    private static boolean canRun() {
         return (
                 !charset.isEmpty() &&
                 !hash.isEmpty() &&
@@ -239,14 +285,6 @@ public class App {
         };
     }
 
-    private static HashAlgorithm parseAlgo(String algo) {
-        return switch (algo) {
-            case "MD5" -> HashAlgorithm.MD5;
-            case "SHA256" -> HashAlgorithm.SHA256;
-            default -> null;
-        };
-    }
-
     private static String buildCharset(String str) {
         if (str.isEmpty()) {
             return "";
@@ -284,13 +322,30 @@ public class App {
             String opt = args[i];
 
             // valueless options
-            if (opt.equals("-h") || opt.equals("--help")) {
+            if (opt.equals("-h") ||  opt.equals("--help")) {
                 printHelp();
                 break;
             }
-            if (opt.equals("-v") || opt.equals("--verbose")) {
-                isVerbose = true;
-                break;
+            switch (opt) {
+                case "-s":
+                    type = ProgramType.SEQUENTIAL;
+                    continue;
+                case "-t":
+                    type = ProgramType.THREADED;
+                    continue;
+                case "-g":
+                    type = ProgramType.CUDA;
+                    continue;
+                case "--md5":
+                    algo = HashAlgorithm.MD5;
+                    continue;
+                case "--sha256":
+                    algo = HashAlgorithm.SHA256;
+                    continue;
+                case "-v":
+                case "--verbose":
+                    isVerbose = true;
+                    continue;
             }
 
             // options with values
@@ -302,30 +357,23 @@ public class App {
             boolean isValueValid = false;
             String value = args[i + 1];
             switch (opt) {
-                case "-t":
-                case "--type":
-                    ProgramType tmpType = parseType(value);
-                    if (tmpType == null) {
-                        break;
-                    }
-                    type = tmpType;
-                    isValueValid = true;
-                    break;
-                case "-a":
-                case "--algo":
-                    HashAlgorithm tmpAlgo = parseAlgo(value);
-                    if (tmpAlgo == null) {
-                        break;
-                    }
-                    algo = tmpAlgo;
-                    isValueValid = true;
-                    break;
                 case "--hash":
                     if (value.isEmpty()) {
                         break;
                     }
                     hash = value;
                     isValueValid = true;
+                    break;
+                case "-d":
+                case "--dict":
+                    if (value.isEmpty()) {
+                        break;
+                    }
+                    File file = new File(value);
+                    if (file.exists()) {
+                        dictPath = value;
+                        isValueValid = true;
+                    }
                     break;
                 case "-m":
                 case "--mask":
@@ -335,11 +383,31 @@ public class App {
                     mask = value;
                     isValueValid = true;
                     break;
-                case "-l":
-                case "--length":
+                case "--mask-ch":
+                    if (value.isEmpty()) {
+                        break;
+                    }
+                    if (value.length() == 1) {
+                        maskCh = value.charAt(0);
+                        isValueValid = true;
+                    }
+                    break;
+                case "--max-len":
                     try {
                         max = Integer.parseInt(value);
-                        isValueValid = true;
+                        if (max > 0) {
+                            isValueValid = true;
+                        }
+                    }  catch (NumberFormatException e) {
+                        break;
+                    }
+                    break;
+                case "--min-len":
+                    try {
+                        min = Integer.parseInt(value);
+                        if (min > 0) {
+                            isValueValid = true;
+                        }
                     }  catch (NumberFormatException e) {
                         break;
                     }
@@ -388,7 +456,7 @@ public class App {
         return result;
     }
 
-    public static void shutdown() {
+    public static void shutdownThreaded() {
         if (manager == null) {
             return;
         }
