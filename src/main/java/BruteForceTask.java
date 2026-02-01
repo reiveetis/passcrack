@@ -79,50 +79,13 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
     }
 
     public boolean matchToTarget(String str) {
-        byte[] currentHash = hash(str, algorithm);
+        byte[] currentHash = Hasher.hash(str, algorithm);
         return Arrays.equals(currentHash, targetHash);
     }
 
     public boolean matchToTarget(byte[] bytes) {
-        byte[] currentHash = hash(bytes, algorithm);
+        byte[] currentHash = Hasher.hash(bytes, algorithm);
         return Arrays.equals(currentHash, targetHash);
-    }
-
-    /// This function returns a hashed byte[] of given String and Algorithm.
-    public static byte[] hash(String str, HashAlgorithm algorithm) {
-        return switch (algorithm) {
-            case SHA256 -> hashSHA256(str.getBytes());
-            case MD5 -> hashMD5(str.getBytes());
-        };
-    }
-
-    public static byte[] hash(byte[] bytes, HashAlgorithm algorithm) {
-        return switch (algorithm) {
-            case SHA256 -> hashSHA256(bytes);
-            case MD5 -> hashMD5(bytes);
-        };
-    }
-
-    /// This function returns a SHA-256 hashed byte[] of given String.
-    public static byte[] hashSHA256(byte[] bytes) {
-        MessageDigest sha256 = null;
-        try {
-            sha256 = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            Logger.debug(e.getMessage());
-        }
-        return sha256.digest(bytes);
-    }
-
-    /// This function returns an MD5 hashed byte[] of given String.
-    public static byte[] hashMD5(byte[] bytes) {
-        MessageDigest md5 = null;
-        try {
-            md5 = MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException e) {
-            Logger.debug(e.getMessage());
-        }
-        return md5.digest(bytes);
     }
 
     private int[] computeBuffer(BigInteger start) {
@@ -133,6 +96,7 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
             return result;
         }
 
+        // After every carryover, the buffer is set to 0, therefore we just skip those
         BigInteger skip = BigInteger.valueOf(maxChar);
         int skipCnt = 0;
         while (start.compareTo(skip) >= 0) {
@@ -146,11 +110,9 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
             int tmp = start.mod(BigInteger.valueOf(maxChar)).intValue();
             result[index] = tmp;
             index--;
-            currentLength++;
             start = start.divide(BigInteger.valueOf(maxChar));
         }
 
-        // adjust for edge case of currentLength being incorrect
         currentLength = skipCnt + 1;
 
 //        System.out.println(Arrays.toString(result));

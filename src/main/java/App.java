@@ -1,7 +1,6 @@
 import util.Logger;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -10,6 +9,8 @@ import java.util.concurrent.Executors;
 
 public class App {
     private final static boolean DEBUG = true;
+    private final static int SHA256_LEN = 64;
+    private final static int MD5_LEN = 32;
     private static final String STRING_09 = "[0-9]";
     private static final String STRING_AZ_L = "[a-z]";
     private static final String STRING_AZ_U = "[A-Z]";
@@ -68,7 +69,13 @@ public class App {
     private static boolean isVerbose = false;
     private static BruteForceManager manager;
 
-    private static int testFragments = 20;
+    private static void writeToCSV(ArrayList<String> lines) throws IOException {
+        FileWriter wr = new FileWriter("results.csv");
+        for (String line : lines) {
+            wr.write(line + "\n");
+        }
+        wr.close();
+    }
 
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
@@ -84,6 +91,7 @@ public class App {
             algo = HashAlgorithm.MD5;
             // "1945hr"
             hash = "71e50ae29377c232b34b79a7b5900c01";
+//            hash = "abcdef";
             mask = "";
             charset = buildCharset("[a-z][0-9]");
             max = 6;
@@ -133,71 +141,70 @@ public class App {
 
     private static void runThreaded(long start, long dictTime) {
         Logger.info("Started in threaded mode...");
-        ExecutorService pool = Executors.newFixedThreadPool(THREADS);
+        try (ExecutorService pool = Executors.newFixedThreadPool(THREADS)) {
 
-        BigInteger allPerms;
-        int maxCh = charset.length();
-        if (mask.isEmpty()) {
-            allPerms = calculateAllPermutations(min, max, maxCh);
-        } else {
-            allPerms = calculateAllPermutations(mask, maskCh, maxCh);
-        }
-
-        // TODO: find/calculate best fragment size
-        int fragments = 100;
-        int latchSize = Math.min(fragments, THREADS);
-        BigInteger chunk = allPerms.divide(BigInteger.valueOf(fragments));
-        BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(fragments));
-        manager = new BruteForceManager(latchSize, false);
-        UI ui = new UI(allPerms, manager, UPDATE_MS);
-
-        ArrayList<Callable<ArrayList<byte[]>>> tasks = new ArrayList<>();
-        for (int i = 0; i < fragments; i++) {
-            BigInteger count = chunk;
-            if (i == fragments - 1) {
-                count = count.add(chunkRem);
-            }
+            BigInteger allPerms;
+            int maxCh = charset.length();
             if (mask.isEmpty()) {
-                tasks.add(new BruteForceTask(
-                        hash,
-                        algo,
-                        charset,
-                        max,
-                        chunk.multiply(BigInteger.valueOf(i)),
-                        count,
-                        manager
-                ));
+                allPerms = calculateAllPermutations(min, max, maxCh);
             } else {
-                tasks.add(new BruteForceTask(
-                        hash,
-                        algo,
-                        charset,
-                        mask,
-                        maskCh,
-                        chunk.multiply(BigInteger.valueOf(i)),
-                        count,
-                        manager
-                ));
+                allPerms = calculateAllPermutations(mask, maskCh, maxCh);
             }
+
+            // TODO: find/calculate best fragment size
+            int fragments = THREADS * max;
+            int latchSize = Math.min(fragments, THREADS);
+            BigInteger chunk = allPerms.divide(BigInteger.valueOf(fragments));
+            BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(fragments));
+            manager = new BruteForceManager(latchSize, false);
+            UI ui = new UI(allPerms, manager, UPDATE_MS);
+
+            ArrayList<Callable<ArrayList<byte[]>>> tasks = new ArrayList<>();
+            for (int i = 0; i < fragments; i++) {
+                BigInteger count = chunk;
+                if (i == fragments - 1) {
+                    count = count.add(chunkRem);
+                }
+                if (mask.isEmpty()) {
+                    tasks.add(new BruteForceTask(
+                            hash,
+                            algo,
+                            charset,
+                            max,
+                            chunk.multiply(BigInteger.valueOf(i)),
+                            count,
+                            manager
+                    ));
+                } else {
+                    tasks.add(new BruteForceTask(
+                            hash,
+                            algo,
+                            charset,
+                            mask,
+                            maskCh,
+                            chunk.multiply(BigInteger.valueOf(i)),
+                            count,
+                            manager
+                    ));
+                }
+            }
+
+            try {
+                ui.start();
+                pool.invokeAll(tasks);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } finally {
+                ui.shutdown();
+                // make sure that updateProgressLatch is dead to prevent deadlock!
+                manager.killLatch();
+            }
+
+            long end = System.currentTimeMillis();
+            long time = end - start;
+
+            printStats(time - dictTime, manager.getTotalProgress());
         }
-
-        try {
-            ui.start();
-            pool.invokeAll(tasks);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } finally {
-            ui.shutdown();
-            // make sure that updateProgressLatch is dead to prevent deadlock!
-            manager.killLatch();
-        }
-
-        long end = System.currentTimeMillis();
-        long time = end - start;
-
-        printStats(time, dictTime, manager.getTotalProgress());
-        // not counting shutdown into runtime, since it takes a really long time
-        pool.shutdown();
     }
 
 
@@ -231,13 +238,13 @@ public class App {
         }
         long end = System.currentTimeMillis();
         long time = end - start;
-        printStats(time, dictTime, strProd.getCurrPerm());
+        printStats(time - dictTime, strProd.getCurrPerm());
     }
 
-    private static void printStats(long time, long dictTime, BigInteger tries) {
+    private static void printStats(long time, BigInteger tries) {
         Logger.info("Finished in: " + time + " ms");
         Logger.info("Total attempts: " + tries);
-        Logger.info("Hashing speed: " + tries.divide(BigInteger.valueOf(time - dictTime)).divide(BigInteger.valueOf(1000)) + " MH/s");
+        Logger.info("Hashing speed: " + tries.divide(BigInteger.valueOf(time)).divide(BigInteger.valueOf(1000)) + " MH/s");
         Logger.info("Shutting down...");
     }
 
@@ -365,7 +372,10 @@ public class App {
                         break;
                     }
                     hash = value;
-                    isValueValid = true;
+                    if (algo == HashAlgorithm.SHA256 && hash.length() == SHA256_LEN ||
+                        algo == HashAlgorithm.MD5 && hash.length() == MD5_LEN) {
+                        isValueValid = true;
+                    }
                     break;
                 case "-d":
                 case "--dict":
