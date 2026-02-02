@@ -20,7 +20,7 @@ public class AppMPJ {
     public static void main(String[] args) {
         MPI.Init(args);
         // read args to init vars
-        int max = 6;
+        int max = 5;
         byte[] targetBytes = HexFormat.of().parseHex("71e50ae29377c232b34b79a7b5900c01");
         String charset = "abcdefghijklmnopqrstuvwxyz0123456789";
         BigInteger allPerms = calculateAllPermutations(1, max, charset.length());
@@ -47,11 +47,13 @@ public class AppMPJ {
         int[] sndBuf = new int[max + 3];
         int[] rcvBuf = new int[max + 3];
 
-        // handle kill switch at the same time as progress to save bandwidth
+        // TODO: send buffer data with flags at the same time to save bandwidth
         if (self == ROOT) {
             killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP, 1, MPI.INT, MPI.ANY_SOURCE, TAG_FORCE_STOP);
+            doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_DONE, 1, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+            int doneCnt = size - 1;
 
-            while (rcvBuf[OFF_FORCE_STOP] != 1) {
+            while (true) {
                 // check for kill switch
                 if (killReq.Test() != null) {
                     // sync buffers
@@ -61,6 +63,16 @@ public class AppMPJ {
                     for (int i = 0; i < size; i++) {
                         MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP, 1, MPI.INT, i, TAG_FORCE_STOP);
                     }
+                    break;
+                }
+                if (doneReq.Test() != null) {
+                    doneReq.Wait();
+                    Logger.debug("ROOT GOT DONE SIGNAL! " + doneCnt);
+                    doneCnt--;
+                    if (doneCnt <= 0) {
+                        break;
+                    }
+                    doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_DONE, 1, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
                 }
             }
         } else {
@@ -123,6 +135,10 @@ public class AppMPJ {
                     killReq.Wait();
                 }
             }
+
+            Logger.debug("Done!");
+            sndBuf[OFF_DONE] = 1;
+            MPI.COMM_WORLD.Isend(sndBuf, OFF_DONE, 1, MPI.INT, ROOT, TAG_DONE);
         }
 
 
@@ -131,7 +147,6 @@ public class AppMPJ {
             printStats(System.currentTimeMillis() - start, BigInteger.ZERO);
         }
 
-//        Logger.debug("Done!");
         MPI.Finalize();
     }
 
