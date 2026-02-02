@@ -13,8 +13,9 @@ public class AppMPJ {
     private final static int TAG_DONE = 1;
     private final static int TAG_PROGRESS = 2;
 
-    private final static int OFF_FORCE_STOP = 1;
-    private final static int OFF_DONE = 2;
+    private final static int OFF_FORCE_STOP = 0;
+    private final static int OFF_DONE = 1;
+    private final static int OFF_PROGRESS = 2;
 
     public static void main(String[] args) {
         MPI.Init(args);
@@ -35,6 +36,7 @@ public class AppMPJ {
 
         Request killReq;
         Request doneReq;
+        Request progressReq;
         BigInteger chunk;
         BigInteger chunkRem;
         BigInteger counter;
@@ -42,23 +44,22 @@ public class AppMPJ {
         int maxCh = charset.length();
 
         int[] buffer;
-        int[] sndBuf = new int[max + 2];
-        int[] rcvBuf = new int[max + 2];
-        int[] killBuf = new int[1];
+        int[] sndBuf = new int[max + 3];
+        int[] rcvBuf = new int[max + 3];
 
-        // spawn UI
         // handle kill switch at the same time as progress to save bandwidth
         if (self == ROOT) {
-            killReq = MPI.COMM_WORLD.Irecv(killBuf, 0, 1, MPI.INT, MPI.ANY_SOURCE, TAG_FORCE_STOP);
+            killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP, 1, MPI.INT, MPI.ANY_SOURCE, TAG_FORCE_STOP);
 
-            while (killBuf[0] != 1) {
+            while (rcvBuf[OFF_FORCE_STOP] != 1) {
                 // check for kill switch
                 if (killReq.Test() != null) {
                     // sync buffers
                     killReq.Wait();
                     Logger.debug("ROOT GOT KILL SIGNAL!");
+                    sndBuf[OFF_FORCE_STOP] = 1;
                     for (int i = 0; i < size; i++) {
-                        MPI.COMM_WORLD.Isend(killBuf, 0, 1, MPI.INT, i, TAG_FORCE_STOP);
+                        MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP, 1, MPI.INT, i, TAG_FORCE_STOP);
                     }
                 }
             }
@@ -71,8 +72,8 @@ public class AppMPJ {
             }
             buffer = bigIntToBuffer(chunk.multiply(BigInteger.valueOf(self - 1)), max, currentLengthPtr, maxCh);
 
-            killReq = MPI.COMM_WORLD.Irecv(killBuf, 0, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
-            while (killBuf[0] != 1) {
+            killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
+            while (rcvBuf[OFF_FORCE_STOP] != 1) {
                 // build bytes[]
                 byte[] bytes;
                 bytes = new byte[currentLengthPtr[0]];
@@ -88,8 +89,8 @@ public class AppMPJ {
                 // match
                 if (matchToTarget(bytes, targetBytes, algorithm)) {
                     Logger.debug("Match: " + new String(bytes));
-                    killBuf[0] = 1;
-                    MPI.COMM_WORLD.Isend(killBuf, 0, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
+                    sndBuf[OFF_FORCE_STOP] = 1;
+                    MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
                     break;
                 }
 
