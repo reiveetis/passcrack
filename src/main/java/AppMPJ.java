@@ -13,18 +13,22 @@ public class AppMPJ {
     private final static int TAG_DONE = 1;
     private final static int TAG_PROGRESS = 2;
 
-    private final static int OFF_FORCE_STOP = 0;
-    private final static int OFF_DONE = 1;
-    private final static int OFF_PROGRESS = 2;
+    private final static int OFF_FORCE_STOP_FLAG = 0;
+    private final static int OFF_DONE_FLAG = 1;
+    private final static int OFF_PROGRESS_FLAG = 2;
+    private final static int OFF_BUFFER_CURRENT_LENGTH = 3;
+    private final static int OFF_BUFFER = 4;
 
     public static void main(String[] args) {
         MPI.Init(args);
         // read args to init vars
-        int max = 5;
+        int max = 6;
         byte[] targetBytes = HexFormat.of().parseHex("71e50ae29377c232b34b79a7b5900c01");
         String charset = "abcdefghijklmnopqrstuvwxyz0123456789";
         BigInteger allPerms = calculateAllPermutations(1, max, charset.length());
         HashAlgorithm algorithm = HashAlgorithm.MD5;
+
+        final int SIZE_BUFFER_AND_CURRENT_LENGTH = max + 1;
 
         int self = MPI.COMM_WORLD.Rank();
         int size = MPI.COMM_WORLD.Size();
@@ -40,18 +44,27 @@ public class AppMPJ {
         BigInteger chunk;
         BigInteger chunkRem;
         BigInteger counter;
+        BigInteger estProgress = BigInteger.ZERO;
+        BigInteger realProgress = BigInteger.ZERO;
         int[] currentLengthPtr = {0};
         int maxCh = charset.length();
 
         int[] buffer;
-        int[] sndBuf = new int[max + 3];
-        int[] rcvBuf = new int[max + 3];
+        int[] sndBuf = new int[max + 4];
+        int[] rcvBuf = new int[max + 4];
 
-        // TODO: send buffer data with flags at the same time to save bandwidth
+        // TODO: send full buffer to root every second, process what we need
+        // TODO: send full buffer to root on death
         if (self == ROOT) {
-            killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP, 1, MPI.INT, MPI.ANY_SOURCE, TAG_FORCE_STOP);
-            doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_DONE, 1, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+            killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, MPI.ANY_SOURCE, TAG_FORCE_STOP);
+            doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_DONE_FLAG, 1, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+            progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, MPI.ANY_SOURCE, TAG_PROGRESS);
             int doneCnt = size - 1;
+            long timerStart = System.currentTimeMillis();
+
+            // prepare sndBuf
+            sndBuf[OFF_FORCE_STOP_FLAG] = 1;
+            sndBuf[OFF_PROGRESS_FLAG] = 1;
 
             while (true) {
                 // check for kill switch
@@ -59,12 +72,13 @@ public class AppMPJ {
                     // sync buffers
                     killReq.Wait();
                     Logger.debug("ROOT GOT KILL SIGNAL!");
-                    sndBuf[OFF_FORCE_STOP] = 1;
                     for (int i = 0; i < size; i++) {
-                        MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP, 1, MPI.INT, i, TAG_FORCE_STOP);
+                        if (i == ROOT) continue;
+                        MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, i, TAG_FORCE_STOP);
                     }
                     break;
                 }
+                // done countdown latch
                 if (doneReq.Test() != null) {
                     doneReq.Wait();
                     Logger.debug("ROOT GOT DONE SIGNAL! " + doneCnt);
@@ -72,7 +86,26 @@ public class AppMPJ {
                     if (doneCnt <= 0) {
                         break;
                     }
-                    doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_DONE, 1, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+                    // repost request
+                    doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_DONE_FLAG, 1, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+                }
+                if (progressReq.Test() != null) {
+                    progressReq.Wait();
+//                    Logger.debug("ROOT GOT PROGRESS SIGNAL!");
+
+                    // compute bigInt
+                    currentLengthPtr[0] = rcvBuf[OFF_BUFFER_CURRENT_LENGTH];
+                    estProgress = estProgress.add(bufferToBigInt(Arrays.copyOfRange(rcvBuf, OFF_BUFFER, OFF_BUFFER + max), maxCh, currentLengthPtr));
+
+                    progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, MPI.ANY_SOURCE, TAG_PROGRESS);
+                }
+                if (System.currentTimeMillis() - timerStart > 1000) {
+                    System.out.println(estProgress + "/" + allPerms);
+                    for (int i = 0; i < size; i++) {
+                        if (i == ROOT) continue;
+                        MPI.COMM_WORLD.Isend(sndBuf, OFF_PROGRESS_FLAG, 1, MPI.INT, i, TAG_PROGRESS);
+                    }
+                    timerStart = System.currentTimeMillis();
                 }
             }
         } else {
@@ -82,10 +115,14 @@ public class AppMPJ {
             if (self == size - 1) {
                 counter = counter.add(chunkRem);
             }
+            BigInteger currentProgress = BigInteger.ZERO;
+
             buffer = bigIntToBuffer(chunk.multiply(BigInteger.valueOf(self - 1)), max, currentLengthPtr, maxCh);
 
-            killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
-            while (rcvBuf[OFF_FORCE_STOP] != 1) {
+            killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
+            progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_PROGRESS_FLAG, 1, MPI.INT, ROOT, TAG_PROGRESS);
+
+            while (rcvBuf[OFF_FORCE_STOP_FLAG] != 1) {
                 // build bytes[]
                 byte[] bytes;
                 bytes = new byte[currentLengthPtr[0]];
@@ -101,8 +138,8 @@ public class AppMPJ {
                 // match
                 if (matchToTarget(bytes, targetBytes, algorithm)) {
                     Logger.debug("Match: " + new String(bytes));
-                    sndBuf[OFF_FORCE_STOP] = 1;
-                    MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
+                    sndBuf[OFF_FORCE_STOP_FLAG] = 1;
+                    MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
                     break;
                 }
 
@@ -112,6 +149,7 @@ public class AppMPJ {
                 if (counter.compareTo(BigInteger.ZERO) <= 0) {
                     break;
                 }
+                currentProgress = currentProgress.add(BigInteger.ONE);
 
                 // carryover
                 int i = max - 1;
@@ -133,18 +171,26 @@ public class AppMPJ {
                 if (killReq.Test() != null) {
                     // sync buffers
                     killReq.Wait();
+                } else if (progressReq.Test() != null) {
+                    progressReq.Wait();
+                    int[] counterBuf = bigIntToBuffer(currentProgress, max, currentLengthPtr, maxCh);
+                    currentProgress = BigInteger.ZERO;
+                    System.arraycopy(counterBuf, 0, sndBuf, OFF_BUFFER, max);
+                    sndBuf[OFF_BUFFER_CURRENT_LENGTH] = currentLengthPtr[0];
+                    MPI.COMM_WORLD.Isend(sndBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, ROOT, TAG_PROGRESS);
+                    progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_PROGRESS_FLAG, 1, MPI.INT, ROOT, TAG_PROGRESS);
                 }
             }
 
             Logger.debug("Done!");
-            sndBuf[OFF_DONE] = 1;
-            MPI.COMM_WORLD.Isend(sndBuf, OFF_DONE, 1, MPI.INT, ROOT, TAG_DONE);
+            sndBuf[OFF_DONE_FLAG] = 1;
+            MPI.COMM_WORLD.Isend(sndBuf, OFF_DONE_FLAG, 1, MPI.INT, ROOT, TAG_DONE);
         }
 
 
         MPI.COMM_WORLD.Barrier();
         if (self == ROOT) {
-            printStats(System.currentTimeMillis() - start, BigInteger.ZERO);
+            printStats(System.currentTimeMillis() - start, estProgress);
         }
 
         MPI.Finalize();
@@ -202,16 +248,16 @@ public class AppMPJ {
         return result;
     }
 
-    private static BigInteger bufferToBigInt(int[] buf, int max, int[] currentLengthPtr) {
+    private static BigInteger bufferToBigInt(int[] buf, int maxCh, int[] currentLengthPtr) {
         BigInteger result = BigInteger.ZERO;
         for (int i = 1; i < currentLengthPtr[0]; i++) {
-            result = result.add(BigInteger.valueOf(max).pow(i));
+            result = result.add(BigInteger.valueOf(maxCh).pow(i));
         }
 
         int exp = 0;
         for (int i = buf.length - 1; i >= 0; i--) {
             if (buf[i] > 0) {
-                result = result.add(BigInteger.valueOf(buf[i]).multiply(BigInteger.valueOf(max).pow(exp)));
+                result = result.add(BigInteger.valueOf(buf[i]).multiply(BigInteger.valueOf(maxCh).pow(exp)));
             }
             exp++;
         }
