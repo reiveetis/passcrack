@@ -14,7 +14,7 @@ public class DictionaryAttack {
             while ((line = br.readLine()) != null) {
                 byte[] bytes = Hasher.hash(line, algo);
                 if (Arrays.equals(bytes, targetBytes)) {
-                    Logger.debug("Found match: " + line);
+                    Logger.debug("Match: " + line);
                     return true;
                 }
             }

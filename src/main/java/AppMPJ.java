@@ -23,12 +23,30 @@ public class AppMPJ {
 
     public static void main(String[] args) {
         MPI.Init(args);
-        // read args to init vars
+        // start read args to init vars
         int max = 6;
         byte[] targetBytes = HexFormat.of().parseHex("71e50ae29377c232b34b79a7b5900c01");
         String charset = "abcdefghijklmnopqrstuvwxyz0123456789";
-        BigInteger allPerms = calculateAllPermutations(1, max, charset.length());
+        String maskStr = "....hr";
+        char[] mask = maskStr.toCharArray();
+        char maskCh = '.';
+        if (mask.length != 0) {
+            max = 0;
+            for (int i = 0; i < mask.length; i++) {
+                if (mask[i] == maskCh) {
+                    mask[i] = 0;
+                    max++;
+                }
+            }
+        }
+        BigInteger allPerms = BigInteger.ZERO;
+        if (mask.length != 0) {
+            allPerms = calculateAllPermutations(maskStr, maskCh, charset.length());
+        } else {
+            allPerms = calculateAllPermutations(1, max, charset.length());
+        }
         HashAlgorithm algorithm = HashAlgorithm.MD5;
+        // end read args to init vars
 
         final int SIZE_BUFFER_AND_CURRENT_LENGTH = max + 1;
 
@@ -113,18 +131,39 @@ public class AppMPJ {
                 limit = limit.add(chunkRem);
             }
             BigInteger currentProgress = BigInteger.ZERO;
-            buffer = bigIntToBuffer(chunk.multiply(BigInteger.valueOf(self - 1)), max, currentLengthPtr, maxCh);
+            int last;
+            BigInteger selfChunkSize = chunk.multiply(BigInteger.valueOf(self - 1));
+            if (mask.length == 0) {
+                buffer = bigIntToBuffer(selfChunkSize, max, currentLengthPtr, maxCh);
+            } else {
+                buffer = computeMaskBuffer(selfChunkSize, max, maxCh);
+                currentLengthPtr[0] = max;
+            }
             killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
             progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_PROGRESS_FLAG, 1, MPI.INT, ROOT, TAG_PROGRESS);
             while (rcvBuf[OFF_FORCE_STOP_FLAG] != 1) {
                 // build bytes[]
                 byte[] bytes;
-                bytes = new byte[currentLengthPtr[0]];
-                int pos = 0;
-                for (int i = max - currentLengthPtr[0]; i <= max - 1; i++) {
-                    bytes[pos] = (byte)charset.charAt(buffer[i]);
-                    pos++;
+                if (mask.length == 0) {
+                    bytes = new byte[currentLengthPtr[0]];
+                    int pos = 0;
+                    for (int i = max - currentLengthPtr[0]; i <= max - 1; i++) {
+                        bytes[pos] = (byte)charset.charAt(buffer[i]);
+                        pos++;
+                    }
+                } else {
+                    bytes = new byte[mask.length];
+                    int pos = 0;
+                    for (int i = 0; i < mask.length; i++) {
+                        if (mask[i] == 0) {
+                            bytes[i] = (byte)charset.charAt(buffer[pos]);
+                            pos++;
+                        } else {
+                            bytes[i] = (byte)mask[i];
+                        }
+                    }
                 }
+
 
 //                String str = new String(bytes);
 //                System.out.println(str);
@@ -182,6 +221,22 @@ public class AppMPJ {
         MPI.Finalize();
     }
 
+    private static int[] computeMaskBuffer(BigInteger num, int max, int maxCh) {
+        int[] result = new int[max];
+        if (num.equals(BigInteger.ZERO)) {
+            return result;
+        }
+
+        int index = max - 1;
+        while (num.compareTo(BigInteger.ZERO) > 0) {
+            int tmp = num.mod(BigInteger.valueOf(maxCh)).intValue();
+            result[index] = tmp;
+            index--;
+            num = num.divide(BigInteger.valueOf(maxCh));
+        }
+        return result;
+    }
+
     private static void sendDataBufferToRoot(BigInteger currentProgress, int max, int maxCh, int[] sndBuf, int SIZE_BUFFER_AND_CURRENT_LENGTH, int tag) {
         int[] tempCurrentLengthPtr = {0};
         int[] counterBuf = bigIntToBuffer(currentProgress, max, tempCurrentLengthPtr, maxCh);
@@ -195,6 +250,18 @@ public class AppMPJ {
         for (int i = min; i <= max; i++) {
             result = result.add(BigInteger.valueOf(maxCh).pow(i));
         }
+        return result;
+    }
+
+    private static BigInteger calculateAllPermutations(String mask, char maskCh, int maxCh) {
+        BigInteger result = BigInteger.ZERO;
+        int unk = 0;
+        for (int i = 0; i < mask.length(); i++) {
+            if (mask.charAt(i) == maskCh) {
+                unk++;
+            }
+        }
+        result = result.add(BigInteger.valueOf(maxCh).pow(unk));
         return result;
     }
 

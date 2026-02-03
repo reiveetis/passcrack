@@ -34,7 +34,6 @@ public class App {
             "--mask-ch <CHAR>",
             "--max-len <LENGTH>",
             "--min-len <LENGTH>",
-            "-v, --verbose",
             "-h, --help"
     };
 
@@ -53,7 +52,6 @@ public class App {
             "Set mask character to the specified character.",
             "Max length for password. Default value is "+ DEFAULT_MAX +". If mask is set, max length = mask length.",
             "Min length for password. Default value is "+ DEFAULT_MIN +". If mask is set, min length = mask length.",
-            "Print out every single permutation. VERY SLOW!",
             "Show this screen."
     };
 
@@ -66,7 +64,6 @@ public class App {
     private static char maskCh = DEFAULT_MASK_CH;
     private static int max = DEFAULT_MAX;
     private static int min = DEFAULT_MIN;
-    private static boolean isVerbose = false;
     private static BruteForceManager manager;
 
     private static void writeToCSV(ArrayList<String> lines) throws IOException {
@@ -227,9 +224,6 @@ public class App {
                 timerStart = timerEnd;
                 System.out.println(strProd.getProgress() + "/" + allPerms);
             }
-            if (isVerbose) {
-                System.out.println("Trying: " + str);
-            }
             if (strCons.matchToTarget(str)) {
                 Logger.debug("Found match: " + str);
                 break;
@@ -351,10 +345,6 @@ public class App {
                     continue;
                 case "--sha256":
                     algo = HashAlgorithm.SHA256;
-                    continue;
-                case "-v":
-                case "--verbose":
-                    isVerbose = true;
                     continue;
             }
 
