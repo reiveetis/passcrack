@@ -8,7 +8,7 @@ import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.concurrent.Callable;
 
-public class BruteForceTask implements Callable<ArrayList<byte[]>> {
+public class BruteForceTask implements Callable<Boolean> {
     private int currentLength;
     private final int maxLength;
     private final int maxChar;
@@ -21,7 +21,6 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
     private final HashAlgorithm algorithm;
     private final BruteForceManager manager;
     private char[] mask = null;
-    private ArrayList<byte[]> history;
 
     public BruteForceTask(String targetHash, HashAlgorithm algorithm, String charset, int maxLength, BigInteger start,
                           BigInteger limit, BruteForceManager manager) {
@@ -34,9 +33,6 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
         this.targetHash = HexFormat.of().parseHex(targetHash);
         this.algorithm = algorithm;
         this.manager = manager;
-        if (manager.isKeepHistory) {
-            history = new ArrayList<>();
-        }
     }
 
     public BruteForceTask(String targetHash, HashAlgorithm algorithm, String charset, String mask, char maskCh,
@@ -57,9 +53,6 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
         this.targetHash = HexFormat.of().parseHex(targetHash);
         this.algorithm = algorithm;
         this.manager = manager;
-        if (manager.isKeepHistory) {
-            history = new ArrayList<>();
-        }
     }
 
     private int[] computeMaskBuffer(BigInteger start) {
@@ -126,11 +119,10 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
     }
 
     @Override
-    public ArrayList<byte[]> call() {
+    public Boolean call() {
 //        Logger.info("Started!");
 
         boolean isProgressUpdated = false;
-        boolean isKeepHistory = manager.isKeepHistory;
         while (!manager.isMatchFound) {
             if (manager.updateProgressLatch.getCount() > 0 && !isProgressUpdated) {
                 manager.addCurrentProgress(counter);
@@ -159,10 +151,6 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
                         bytes[i] = (byte)mask[i];
                     }
                 }
-            }
-
-            if (isKeepHistory) {
-                history.add(bytes);
             }
 
 //            String str = new String(bytes);
@@ -210,6 +198,6 @@ public class BruteForceTask implements Callable<ArrayList<byte[]>> {
             manager.updateProgressLatch.countDown();
         }
 //        Logger.info("Done!");
-        return history;
+        return true;
     }
 }

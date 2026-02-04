@@ -215,10 +215,10 @@ public class App {
             int latchSize = Math.min(fragments, THREADS);
             BigInteger chunk = allPerms.divide(BigInteger.valueOf(fragments));
             BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(fragments));
-            manager = new BruteForceManager(latchSize, false);
+            manager = new BruteForceManager(latchSize);
             UI ui = new UI(allPerms, manager, UPDATE_MS);
 
-            ArrayList<Callable<ArrayList<byte[]>>> tasks = new ArrayList<>();
+            ArrayList<Callable<Boolean>> tasks = new ArrayList<>();
             for (int i = 0; i < fragments; i++) {
                 BigInteger count = chunk;
                 if (i == fragments - 1) {

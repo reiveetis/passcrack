@@ -4,9 +4,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class BruteForceManager {
-    // for testing purposes
-    public boolean isKeepHistory;
-
     // kills all tasks
     public boolean isMatchFound = false;
 
@@ -21,9 +18,8 @@ public class BruteForceManager {
     private BigInteger currentProgress = BigInteger.ZERO;
     private final ReadWriteLock currRw = new ReentrantReadWriteLock();
 
-    public BruteForceManager(int latchSize, boolean keepHistory) {
+    public BruteForceManager(int latchSize) {
         this.LATCH_SIZE = latchSize;
-        this.isKeepHistory = keepHistory;
     }
 
     public void killLatch() {
