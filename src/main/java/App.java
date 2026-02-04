@@ -2,13 +2,14 @@ import util.Logger;
 
 import java.io.*;
 import java.math.BigInteger;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class App {
-    private final static boolean DEBUG = true;
+    private final static boolean DEBUG = false;
     private final static int SHA256_LEN = 64;
     private final static int MD5_LEN = 32;
     private static final String STRING_09 = "[0-9]";
@@ -20,38 +21,38 @@ public class App {
     private static final int DEFAULT_MIN = 1;
     private static final char DEFAULT_MASK_CH = '?';
     private static final String DEFAULT_CHARSET = STRING_AZ_L + STRING_09;
+    private static final String MPJ_JAR = "distributed.jar";
+    private static final String MPJ_JAR_DIR = "./";
 
     private final static String[] OPTIONS = {
             "-s",
             "-t",
-            "-g",
+            "-d",
             "--md5",
             "--sha256",
             "--hash <HASH>",
+            "--dict <PATH_TO_FILE>",
             "-c, --charset <CHARSET>",
-            "-d, --dict <PATH_TO_FILE>",
             "-m, --mask <MASK>",
             "--mask-ch <CHAR>",
             "--max-len <LENGTH>",
-            "--min-len <LENGTH>",
             "-h, --help"
     };
 
     private final static String[] OPTION_DESC = {
             "Run program in sequential mode.",
             "Run program in threaded mode (uses all system threads).",
-            "Run program in GPU (CUDA) mode.",
+            "Run program in distributed mode (MPI).",
             "Select encryption algorithm MD5.",
             "Select encryption algorithm SHA-256.",
             "Input hash to be cracked.",
+            "Dictionary attack. Input a path to a plain text file with passwords.",
             "Charset to use for password cracking. Available macros: '[A-Z]', '[a-z]', '[0-9]', everything " +
                     "else is going to be parsed as a separate character. Default value is '"+ DEFAULT_CHARSET +"'. Example: '-c [a-z][A-Z][0-9]!?@#$'",
-            "Dictionary attack. Input a path to a plain text file with passwords.",
             "Mask out known characters. Default mask character: '" + DEFAULT_MASK_CH + "'. Example: '-m user????', this will only generate permutations for " +
                     "unknown characters '?' with the specified charset.",
             "Set mask character to the specified character.",
             "Max length for password. Default value is "+ DEFAULT_MAX +". If mask is set, max length = mask length.",
-            "Min length for password. Default value is "+ DEFAULT_MIN +". If mask is set, min length = mask length.",
             "Show this screen."
     };
 
@@ -84,7 +85,7 @@ public class App {
             parseArgs(args);
         } else {
             Logger.debug("!!! RUNNING IN DEBUG MODE !!!");
-            type = ProgramType.THREADED;
+            type = ProgramType.DISTRIBUTED;
             algo = HashAlgorithm.MD5;
             // "1945hr"
             hash = "71e50ae29377c232b34b79a7b5900c01";
@@ -111,9 +112,9 @@ public class App {
         }
 
         long dictTime = 0;
+        long dictStart = System.currentTimeMillis();
         if (!dictPath.isEmpty()) {
             try {
-                long dictStart = System.currentTimeMillis();
                 if (DictionaryAttack.start(hash, algo, dictPath)) {
                     dictTime = System.currentTimeMillis() - dictStart;
                     Logger.info("Finished in " + dictTime + " ms");
@@ -122,18 +123,79 @@ public class App {
             } catch (IOException e) {
                 Logger.error(e.getMessage());
             }
+            dictTime = System.currentTimeMillis() - dictStart;
         }
 
         if (type.equals(ProgramType.SEQUENTIAL)) {
             runSequential(start, dictTime);
         } else if (type.equals(ProgramType.THREADED)) {
             runThreaded(start, dictTime);
-        } else if (type.equals(ProgramType.CUDA)) {
-            runCuda(start, dictTime);
+        } else if (type.equals(ProgramType.DISTRIBUTED)) {
+            runDistributed(start, dictTime, args);
         }
     }
 
-    private static void runCuda(long start, long dictTime) {
+    private static void runDistributed(long start, long dictTime, String[] args) {
+        Logger.info("Started in distributed mode...");
+        String mpjHome = System.getenv("MPJ_HOME");
+        File mpj_jar = new File(MPJ_JAR_DIR + MPJ_JAR);
+        Path mpj_path = mpj_jar.toPath();
+        if (mpjHome == null) {
+            Logger.error("MPJ_HOME environment variable is not set!");
+            Logger.error("To run passcrack in distributed mode, you have to install MPJ and set MPJ_HOME to the root directory of MPJ.");
+            Logger.error("Get MPJ from: https://mpj-express.org/");
+            System.exit(-1);
+        }
+        if (!mpj_jar.exists()) {
+            Logger.error("Could not find '" + mpj_path + "'!");
+            System.exit(-1);
+        }
+        BigInteger allPerms;
+        int maxCh = charset.length();
+        if (mask.isEmpty()) {
+            allPerms = calculateAllPermutations(min, max, maxCh);
+        } else {
+            allPerms = calculateAllPermutations(mask, maskCh, maxCh);
+        }
+
+        // java -jar $MPJ_HOME/lib/starter.jar -np [THREADS] -jar ./distributed.jar [args...]
+        ArrayList<String> command = new ArrayList<>();
+        // vm options
+        command.add("java");
+        command.add("-jar");
+        command.add(mpjHome + File.separator + "lib" + File.separator + "starter.jar");
+        command.add("-np");
+        command.add("" + THREADS);
+        command.add("-jar");
+        command.add(mpj_path.toString());
+        // args
+        command.add("ARGS_START");
+        command.add(charset);
+        command.add(hash);
+        if (algo.equals(HashAlgorithm.MD5)) {
+            command.add("0");
+        } else {
+            command.add("1");
+        }
+        command.add("" + max);
+        command.add(allPerms.toString());
+        command.add("" + start);
+        command.add("" + dictTime);
+        command.add(mask);
+        command.add("" + maskCh);
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.inheritIO();
+        Process process = null;
+        int exitCode = 0;
+        try {
+            process = pb.start();
+            exitCode = process.waitFor();
+        } catch (Exception e) {
+            Logger.error(e.getMessage());
+            System.exit(-1);
+        }
+        System.exit(exitCode);
     }
 
     private static void runThreaded(long start, long dictTime) {
@@ -200,14 +262,13 @@ public class App {
             long end = System.currentTimeMillis();
             long time = end - start;
 
-            printStats(time - dictTime, manager.getTotalProgress());
+            printStats(time, dictTime, manager.getTotalProgress());
         }
     }
 
 
     private static void runSequential(long start, long dictTime) {
         Logger.info("Started in sequential mode...");
-        Logger.info("Computing for: " + hash);
         StringConsumer strCons = new StringConsumer(hash, algo);
         StringProducer strProd;
         if (mask.isEmpty()) {
@@ -232,13 +293,14 @@ public class App {
         }
         long end = System.currentTimeMillis();
         long time = end - start;
-        printStats(time - dictTime, strProd.getCurrPerm());
+        printStats(time, dictTime, strProd.getCurrPerm());
     }
 
-    private static void printStats(long time, BigInteger tries) {
-        Logger.info("Finished in: " + time + " ms");
+    public static void printStats(long runtime, long dictTime, BigInteger tries) {
+        Logger.info("Brute force finished in: " + (runtime - dictTime) + " ms");
+        Logger.info("Total run time: " + runtime + " ms");
         Logger.info("Total attempts: " + tries);
-        Logger.info("Hashing speed: " + tries.divide(BigInteger.valueOf(time)).divide(BigInteger.valueOf(1000)) + " MH/s");
+        Logger.info("Hashing speed: " + tries.divide(BigInteger.valueOf(runtime)).divide(BigInteger.valueOf(1000)) + " MH/s");
         Logger.info("Shutting down...");
     }
 
@@ -284,7 +346,7 @@ public class App {
         return switch (type) {
             case "s" -> ProgramType.SEQUENTIAL;
             case "t" -> ProgramType.THREADED;
-            case "c" -> ProgramType.CUDA;
+            case "c" -> ProgramType.DISTRIBUTED;
             default -> null;
         };
     }
@@ -321,7 +383,7 @@ public class App {
         return sb.toString();
     }
 
-    private static void parseArgs(String[] args) {
+    public static void parseArgs(String[] args) {
         for (int i = 0; i < args.length; i++) {
             String opt = args[i];
 
@@ -337,8 +399,8 @@ public class App {
                 case "-t":
                     type = ProgramType.THREADED;
                     continue;
-                case "-g":
-                    type = ProgramType.CUDA;
+                case "-d":
+                    type = ProgramType.DISTRIBUTED;
                     continue;
                 case "--md5":
                     algo = HashAlgorithm.MD5;
@@ -367,7 +429,6 @@ public class App {
                         isValueValid = true;
                     }
                     break;
-                case "-d":
                 case "--dict":
                     if (value.isEmpty()) {
                         break;
@@ -399,16 +460,6 @@ public class App {
                     try {
                         max = Integer.parseInt(value);
                         if (max > 0) {
-                            isValueValid = true;
-                        }
-                    }  catch (NumberFormatException e) {
-                        break;
-                    }
-                    break;
-                case "--min-len":
-                    try {
-                        min = Integer.parseInt(value);
-                        if (min > 0) {
                             isValueValid = true;
                         }
                     }  catch (NumberFormatException e) {

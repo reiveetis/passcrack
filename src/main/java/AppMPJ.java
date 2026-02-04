@@ -10,6 +10,16 @@ import java.util.HexFormat;
 public class AppMPJ {
     private final static int ROOT = 0;
 
+    private final static int ARG_CHARSET = 0;
+    private final static int ARG_HASH = 1;
+    private final static int ARG_ALGO = 2;
+    private final static int ARG_MAX = 3;
+    private final static int ARG_PERMS = 4;
+    private final static int ARG_START = 5;
+    private final static int ARG_DICT = 6;
+    private final static int ARG_MASK = 7;
+    private final static int ARG_MASKCH = 8;
+
     private final static int TAG_FORCE_STOP = 0;
     private final static int TAG_DONE = 1;
     private final static int TAG_PROGRESS = 2;
@@ -23,13 +33,36 @@ public class AppMPJ {
 
     public static void main(String[] args) {
         MPI.Init(args);
-        // start read args to init vars
-        int max = 6;
-        byte[] targetBytes = HexFormat.of().parseHex("71e50ae29377c232b34b79a7b5900c01");
-        String charset = "abcdefghijklmnopqrstuvwxyz0123456789";
-        String maskStr = "....hr";
+        int args_start = -1;
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].equals("ARGS_START")) {
+                args_start = i + 1;
+            }
+        }
+        if (args_start == -1) {
+            System.exit(-1);
+        }
+        for (int i = args_start; i < args.length; i++) {
+            if (i == args_start + ARG_MASK) continue;
+            if (args[i].isEmpty()) {
+                System.exit(-1);
+            }
+        }
+
+        String charset = args[args_start + ARG_CHARSET];
+        String hash = args[args_start + ARG_HASH];
+        HashAlgorithm algo = HashAlgorithm.MD5;
+        if (Integer.parseInt(args[args_start + ARG_ALGO]) == 1) {
+            algo = HashAlgorithm.SHA256;
+        }
+        int max = Integer.parseInt(args[args_start + ARG_MAX]);
+        BigInteger allPerms = new BigInteger(args[args_start + ARG_PERMS]);
+        long start = Long.parseLong(args[args_start + ARG_START]);
+        long dictTime = Long.parseLong(args[args_start + ARG_DICT]);
+        String maskStr = args[args_start + ARG_MASK];
+        char maskCh = args[args_start + ARG_MASKCH].charAt(0);
+        byte[] targetBytes = HexFormat.of().parseHex(hash);
         char[] mask = maskStr.toCharArray();
-        char maskCh = '.';
         if (mask.length != 0) {
             max = 0;
             for (int i = 0; i < mask.length; i++) {
@@ -39,31 +72,15 @@ public class AppMPJ {
                 }
             }
         }
-        BigInteger allPerms = BigInteger.ZERO;
-        if (mask.length != 0) {
-            allPerms = calculateAllPermutations(maskStr, maskCh, charset.length());
-        } else {
-            allPerms = calculateAllPermutations(1, max, charset.length());
-        }
-        HashAlgorithm algorithm = HashAlgorithm.MD5;
-        // end read args to init vars
 
         final int SIZE_BUFFER_AND_CURRENT_LENGTH = max + 1;
-
         int self = MPI.COMM_WORLD.Rank();
         int size = MPI.COMM_WORLD.Size();
-
-        long start = 0;
-        if (self == ROOT) {
-            start = System.currentTimeMillis();
-        }
-
         Request killReq, doneReq, progressReq;
         BigInteger estProgress = BigInteger.ZERO;
         BigInteger attempts = BigInteger.ZERO;
         int[] currentLengthPtr = {0};
         int maxCh = charset.length();
-
         int[] buffer;
         int[] sndBuf = new int[max + 3];
         int[] rcvBuf = new int[max + 3];
@@ -169,7 +186,7 @@ public class AppMPJ {
 //                System.out.println(str);
 
                 // match
-                if (matchToTarget(bytes, targetBytes, algorithm)) {
+                if (matchToTarget(bytes, targetBytes, algo)) {
                     Logger.debug("Match: " + new String(bytes));
                     sndBuf[OFF_FORCE_STOP_FLAG] = 1;
                     MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
@@ -216,7 +233,7 @@ public class AppMPJ {
         }
         MPI.COMM_WORLD.Barrier();
         if (self == ROOT) {
-            printStats(System.currentTimeMillis() - start, attempts);
+            App.printStats(System.currentTimeMillis() - start, dictTime, attempts);
         }
         MPI.Finalize();
     }
@@ -263,13 +280,6 @@ public class AppMPJ {
         }
         result = result.add(BigInteger.valueOf(maxCh).pow(unk));
         return result;
-    }
-
-    private static void printStats(long time, BigInteger tries) {
-        Logger.info("Finished in: " + time + " ms");
-        Logger.info("Total attempts: " + tries);
-        Logger.info("Hashing speed: " + tries.divide(BigInteger.valueOf(time)).divide(BigInteger.valueOf(1000)) + " MH/s");
-        Logger.info("Shutting down...");
     }
 
     private static void resetBuffer(int[] buf) {
