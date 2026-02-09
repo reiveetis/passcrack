@@ -1,15 +1,17 @@
 cuda/
 dict/
 target/
+tests/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
 report/
 distributed.jar
-META-INF/
+manifests/
 
 ### IntelliJ IDEA ###
+.idea/runConfigurations/
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml

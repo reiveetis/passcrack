@@ -476,12 +476,12 @@ public class App {
                     isValueValid = true;
                     break;
                 default:
-                    System.out.println("Unknown option: '" + opt + "'");
+                    Logger.error("Unknown option: '" + opt + "'");
                     return;
             }
 
             if (!isValueValid) {
-                System.out.println("Invalid value '" + value + "' for option '" + opt + "'");
+                Logger.error("Invalid value '" + value + "' for option '" + opt + "'");
                 return;
             }
 

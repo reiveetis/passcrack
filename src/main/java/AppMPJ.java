@@ -39,15 +39,7 @@ public class AppMPJ {
                 args_start = i + 1;
             }
         }
-        if (args_start == -1) {
-            System.exit(-1);
-        }
-        for (int i = args_start; i < args.length; i++) {
-            if (i == args_start + ARG_MASK) continue;
-            if (args[i].isEmpty()) {
-                System.exit(-1);
-            }
-        }
+        validateArgs(args, args_start);
 
         String charset = args[args_start + ARG_CHARSET];
         String hash = args[args_start + ARG_HASH];
@@ -73,7 +65,7 @@ public class AppMPJ {
             }
         }
 
-        final int SIZE_BUFFER_AND_CURRENT_LENGTH = max + 1;
+        final int bufferAndLengthSize = max + 1;
         int self = MPI.COMM_WORLD.Rank();
         int size = MPI.COMM_WORLD.Size();
         Request killReq, doneReq, progressReq;
@@ -87,8 +79,8 @@ public class AppMPJ {
 
         if (self == ROOT) {
             killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, MPI.ANY_SOURCE, TAG_FORCE_STOP);
-            doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
-            progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, MPI.ANY_SOURCE, TAG_PROGRESS);
+            doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, bufferAndLengthSize, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+            progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, bufferAndLengthSize, MPI.INT, MPI.ANY_SOURCE, TAG_PROGRESS);
             int doneCnt = size - 1;
             long timerStart = System.currentTimeMillis();
 
@@ -101,41 +93,32 @@ public class AppMPJ {
                 if (killReq.Test() != null) {
                     // sync buffers
                     killReq.Wait();
-//                    Logger.debug("ROOT GOT KILL SIGNAL!");
-                    for (int i = 0; i < size; i++) {
-                        if (i == ROOT) continue;
-                        MPI.COMM_WORLD.Isend(sndBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, i, TAG_FORCE_STOP);
-                    }
+                    postRequestToAll(size, sndBuf, OFF_FORCE_STOP_FLAG, TAG_FORCE_STOP);
                 }
                 // done countdown latch
                 if (doneReq.Test() != null) {
                     doneReq.Wait();
-//                    Logger.debug("ROOT GOT DONE SIGNAL! " + doneCnt);
                     doneCnt--;
                     // compute bigInt
                     currentLengthPtr[0] = rcvBuf[OFF_BUFFER_CURRENT_LENGTH];
                     attempts = attempts.add(bufferToBigInt(Arrays.copyOfRange(rcvBuf, OFF_BUFFER, OFF_BUFFER + max), maxCh, currentLengthPtr[0]));
+                    // countdown latch
                     if (doneCnt <= 0) {
                         break;
                     }
-                    // repost request
-                    doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
+                    doneReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, bufferAndLengthSize, MPI.INT, MPI.ANY_SOURCE, TAG_DONE);
                 }
                 // progress update
                 if (progressReq.Test() != null) {
                     progressReq.Wait();
-//                    Logger.debug("ROOT GOT PROGRESS SIGNAL!");
                     currentLengthPtr[0] = rcvBuf[OFF_BUFFER_CURRENT_LENGTH];
                     estProgress = estProgress.add(bufferToBigInt(Arrays.copyOfRange(rcvBuf, OFF_BUFFER, OFF_BUFFER + max), maxCh, currentLengthPtr[0]));
-                    progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, MPI.ANY_SOURCE, TAG_PROGRESS);
+                    progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_BUFFER_CURRENT_LENGTH, bufferAndLengthSize, MPI.INT, MPI.ANY_SOURCE, TAG_PROGRESS);
                 }
                 // progress update timer
                 if (System.currentTimeMillis() - timerStart > UPDATE_MS) {
                     System.out.println(estProgress + "/" + allPerms);
-                    for (int i = 0; i < size; i++) {
-                        if (i == ROOT) continue;
-                        MPI.COMM_WORLD.Isend(sndBuf, OFF_PROGRESS_FLAG, 1, MPI.INT, i, TAG_PROGRESS);
-                    }
+                    postRequestToAll(size, sndBuf, OFF_PROGRESS_FLAG, TAG_PROGRESS);
                     timerStart = System.currentTimeMillis();
                 }
             }
@@ -143,17 +126,16 @@ public class AppMPJ {
             BigInteger chunk = allPerms.divide(BigInteger.valueOf(size - 1));
             BigInteger chunkRem = allPerms.mod(BigInteger.valueOf(size - 1));
             BigInteger limit = chunk;
-            BigInteger counter = BigInteger.ZERO;
             if (self == size - 1) {
                 limit = limit.add(chunkRem);
             }
+            BigInteger counter = BigInteger.ZERO;
             BigInteger currentProgress = BigInteger.ZERO;
-            int last;
-            BigInteger selfChunkSize = chunk.multiply(BigInteger.valueOf(self - 1));
+            BigInteger selfChunkStart = chunk.multiply(BigInteger.valueOf(self - 1));
             if (mask.length == 0) {
-                buffer = bigIntToBuffer(selfChunkSize, max, currentLengthPtr, maxCh);
+                buffer = bigIntToBuffer(selfChunkStart, max, currentLengthPtr, maxCh);
             } else {
-                buffer = computeMaskBuffer(selfChunkSize, max, maxCh);
+                buffer = computeMaskBuffer(selfChunkStart, max, maxCh);
                 currentLengthPtr[0] = max;
             }
             killReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_FORCE_STOP_FLAG, 1, MPI.INT, ROOT, TAG_FORCE_STOP);
@@ -180,7 +162,6 @@ public class AppMPJ {
                         }
                     }
                 }
-
 
 //                String str = new String(bytes);
 //                System.out.println(str);
@@ -223,12 +204,12 @@ public class AppMPJ {
                     killReq.Wait();
                 } else if (progressReq.Test() != null) {
                     progressReq.Wait();
-                    sendDataBufferToRoot(currentProgress, max, maxCh, sndBuf, SIZE_BUFFER_AND_CURRENT_LENGTH, TAG_PROGRESS);
+                    sendDataBufferToRoot(currentProgress, max, maxCh, sndBuf, bufferAndLengthSize, TAG_PROGRESS);
                     currentProgress = BigInteger.ZERO;
                     progressReq = MPI.COMM_WORLD.Irecv(rcvBuf, OFF_PROGRESS_FLAG, 1, MPI.INT, ROOT, TAG_PROGRESS);
                 }
             }
-            sendDataBufferToRoot(counter, max, maxCh, sndBuf, SIZE_BUFFER_AND_CURRENT_LENGTH, TAG_DONE);
+            sendDataBufferToRoot(counter, max, maxCh, sndBuf, bufferAndLengthSize, TAG_DONE);
 //            Logger.debug("Done!");
         }
         MPI.COMM_WORLD.Barrier();
@@ -236,6 +217,25 @@ public class AppMPJ {
             App.printStats(System.currentTimeMillis() - start, dictTime, attempts);
         }
         MPI.Finalize();
+    }
+
+    private static void postRequestToAll(int size, int[] sndBuf, int flag, int tag) {
+        for (int i = 0; i < size; i++) {
+            if (i == ROOT) continue;
+            MPI.COMM_WORLD.Isend(sndBuf, flag, 1, MPI.INT, i, tag);
+        }
+    }
+
+    private static void validateArgs(String[] args, int args_start) {
+        if (args_start == -1) {
+            System.exit(-1);
+        }
+        for (int i = args_start; i < args.length; i++) {
+            if (i == args_start + ARG_MASK) continue;
+            if (args[i].isEmpty()) {
+                System.exit(-1);
+            }
+        }
     }
 
     private static int[] computeMaskBuffer(BigInteger num, int max, int maxCh) {
@@ -260,26 +260,6 @@ public class AppMPJ {
         System.arraycopy(counterBuf, 0, sndBuf, OFF_BUFFER, max);
         sndBuf[OFF_BUFFER_CURRENT_LENGTH] = tempCurrentLengthPtr[0];
         MPI.COMM_WORLD.Isend(sndBuf, OFF_BUFFER_CURRENT_LENGTH, SIZE_BUFFER_AND_CURRENT_LENGTH, MPI.INT, ROOT, tag);
-    }
-
-    private static BigInteger calculateAllPermutations(int min, int max, int maxCh) {
-        BigInteger result = BigInteger.ZERO;
-        for (int i = min; i <= max; i++) {
-            result = result.add(BigInteger.valueOf(maxCh).pow(i));
-        }
-        return result;
-    }
-
-    private static BigInteger calculateAllPermutations(String mask, char maskCh, int maxCh) {
-        BigInteger result = BigInteger.ZERO;
-        int unk = 0;
-        for (int i = 0; i < mask.length(); i++) {
-            if (mask.charAt(i) == maskCh) {
-                unk++;
-            }
-        }
-        result = result.add(BigInteger.valueOf(maxCh).pow(unk));
-        return result;
     }
 
     private static void resetBuffer(int[] buf) {
